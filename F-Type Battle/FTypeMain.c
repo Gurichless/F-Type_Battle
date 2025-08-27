@@ -21,13 +21,17 @@
 #define MAX_MONS 6
 #define MON_WIDTH 200
 #define MON_HEIGHT 200
-#define MAX_PROJECTILES 10
 #define PROJECTILE_WIDTH 50
 #define PROJECTILE_HEIGHT 50
+#define PROJECTILE_DELAY 600
+#define PLAYER_PROJ_DELAY 400
+#define HEALTH_LOSS_DELAY 60
+#define MAX_MON_HP 100
+#define MAX_PLAYER_HP 100
 
 static SDL_Color white = { 255, 255, 255, 255 };
 static SDL_Color red = { 255, 0, 0, 255 };
-
+static SDL_Color blue = { 0, 0, 255, 255 };
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static TTF_Font* font = NULL;
@@ -127,7 +131,9 @@ typedef struct {
     int att;
     int def;
     int spd;
+    bool encountered;//if true when shot on track, will be added to the battle
     SDL_FRect rect;
+    
 }Monster;
 
 
@@ -135,19 +141,24 @@ void render_text(float x, float y, SDL_Color color, const char* text);
 
 //MON DATA
 Monster monsters[MAX_MONS] = {
-    {.name = "test0", .type = "type0", .HP = 100, .att = 100, .def = 100, .spd = 100, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test1", .type = "type1", .HP = 100, .att = 100, .def = 100, .spd = 100, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test2", .type = "type2", .HP = 100, .att = 100, .def = 100, .spd = 100, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test3", .type = "type3", .HP = 100, .att = 100, .def = 100, .spd = 100, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test4", .type = "type4", .HP = 100, .att = 100, .def = 100, .spd = 100, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test5", .type = "type5", .HP = 100, .att = 100, .def = 100, .spd = 100, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
+    {.name = "test0", .type = "type0", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
+    {.name = "test1", .type = "type1", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
+    {.name = "test2", .type = "type2", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
+    {.name = "test3", .type = "type3", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
+    {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
+    {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
 };
 
 //PROJECTILES
 typedef struct {
-    SDL_FRect rects[MAX_PROJECTILES];
+    SDL_FRect rects;
 }Projectile;
 Projectile projectile;
+Projectile player_proj;
+bool proj_started;
+Uint32 proj_start_time;
+Uint32 proj_elapsed;
+
 
 //gets current mon on screen so coord can be loaded
 int curr_mon_on_screen();
@@ -155,6 +166,25 @@ int curr_mon_on_screen();
 void load_projectile();
 bool projectiles_loaded = false;
 int accel_projectile();
+bool proj_pressed;
+bool player_proj_started;
+Uint32 player_proj_start_time;
+Uint32 player_proj_elapsed;
+void accel_player_proj();
+void load_player_proj();
+bool player_loaded;
+bool enemy_hit_player=false;
+bool player_hit_enemy=false;
+//projectile colls
+void handle_proj_colls();//function handles timing of when HP is subtracted, and how longit is displayed
+Uint32 proj_coll_start;
+Uint32 proj_coll_elapsed;
+bool proj_coll_started;
+Uint32 proj_coll_start_en;
+Uint32 proj_coll_elapsed_en;
+bool proj_coll_started_en;
+
+
 
 //GAME STATE ENUM
 typedef enum {
@@ -165,6 +195,26 @@ typedef enum {
 
 GameState game_state = GAMESTATE_TRACK;
 
+//MOUSE
+bool mouse_in_valid_zone = true;
+float mouse_x = 0.0, mouse_y = 0.0;
+void check_mouse();//checks if mouse in valid area and gets mouse gap
+float player_mouse_gap; //modifies the rate of y change
+
+//Health
+int player_hp =  MAX_PLAYER_HP;
+const char player_hp_buff[40];
+const char mon_hp_buff[40];
+bool player_hp_started;
+bool enemy_hp_started;
+Uint32 player_hp_start_time;
+Uint32 enemy_hp_start_time;
+Uint32 player_hp_elapsed;
+Uint32 enemy_hp_elapsed;
+Uint32 enemy_hp_delay=300;
+Uint32 player_hp_delay=300;
+
+//BATTLE
 
 
 //INITIALIZATION
@@ -273,6 +323,12 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
             break;
         }
     }
+    if(event->type == SDL_EVENT_MOUSE_BUTTON_DOWN){
+        proj_pressed = true;
+    }
+    if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        proj_pressed = false;
+    }
     for (int i = 0; i < MAX_CORNERS; i++) {
         for (int j = 0; j < MAX_RECTS; j++) {
             {
@@ -303,6 +359,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
 
             }
         }
+        
     }
     for(int k =0; k<MAX_ITEMS; k++){
         if(abs(player_rect.x - track_items.items[k].x)  < PLAYER_WIDTH *2 && abs(player_rect.y - track_items.items[k].y) < PLAYER_HEIGHT * 2){
@@ -310,6 +367,18 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
                 SDL_Log("Item Touched");
             }
         }
+    }
+    if (check_rect_overlap(&monsters[curr_mon_on_screen()].rect, &player_proj.rects, NULL)==1){
+        player_hit_enemy = true;
+    }
+    else{
+        player_hit_enemy = false;
+    }
+    if (check_rect_overlap(&player_rect, &projectile.rects, NULL)==1) {
+        enemy_hit_player = true;
+    }
+    else{
+        enemy_hit_player = false;
     }
 
 
@@ -319,6 +388,9 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
 SDL_AppResult SDL_AppIterate(void* appstate) {
     SDL_SetRenderDrawColor(renderer, 0,0,0, 255);//set to the amiga color for the background of the main game screen
     SDL_RenderClear(renderer);
+
+    
+    SDL_GetMouseState(&mouse_x, &mouse_y);
 
     now = SDL_GetTicks();
     //GAMESTATE SWITCH START
@@ -362,8 +434,12 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
   
     
             accel_projectile();
-
-
+            if(!player_loaded){
+                load_player_proj();
+            }
+            accel_player_proj();
+            handle_proj_colls();
+            check_mouse();
             break;
         }
     }
@@ -654,9 +730,10 @@ void scroll_track(){
         for(int l=0; l<MAX_MONS; l++){
             monsters[l].rect.x -= track_velocity;
         }
-        for(int k=0; k<MAX_PROJECTILES; k++){
-            projectile.rects[k].x -= track_velocity;
-        }
+
+        projectile.rects.x -= track_velocity;
+        player_proj.rects.x -= track_velocity;
+
         last_time = SDL_GetTicks();
     }
 }
@@ -889,33 +966,63 @@ void render_text( float x, float y, SDL_Color color, const char* text)
 
 void load_projectile(){
 
-    for (int j = 0; j < MAX_PROJECTILES; j++) {
-        projectile.rects[j].w = PROJECTILE_WIDTH;
-        projectile.rects[j].h = PROJECTILE_HEIGHT;
-        projectile.rects[j].x = monsters[curr_mon_on_screen()].rect.x;
-        projectile.rects[j].y = monsters[curr_mon_on_screen()].rect.y;
+
+    projectile.rects.w = PROJECTILE_WIDTH;
+    projectile.rects.h = PROJECTILE_HEIGHT;
+    projectile.rects.x = monsters[curr_mon_on_screen()].rect.x;
+    projectile.rects.y = monsters[curr_mon_on_screen()].rect.y;
                 
-    }
+
 
     projectiles_loaded = true;
 
 
 
 }
+void load_player_proj(){
+    player_proj.rects.w = PROJECTILE_WIDTH;
+    player_proj.rects.h = PROJECTILE_HEIGHT;
+    player_proj.rects.x = player_rect.x;
+    player_proj.rects.y = player_rect.y+(PROJECTILE_HEIGHT/2);
+    player_loaded = true;
+}
 int accel_projectile(){
     
 
   
-    for (int j = 0; j < MAX_PROJECTILES; j++) {
-        if (projectile.rects[j].x<WINDOW_WIDTH && projectile.rects[j].x>-500)
-        {
-            projectile.rects[j].x -= projectile_velocity;
-            render_rect(renderer, projectile.rects[j], red);
+
+    if (projectile.rects.x<WINDOW_WIDTH && projectile.rects.x>-500)
+    {
+        if(!proj_started){
+            proj_start_time = SDL_GetTicks();
+            proj_started = true;
         }
- 
+        else{
+            if(player_rect.x< projectile.rects.x){
+                projectile.rects.x -= projectile_velocity;
+                
+                
+            }
+            else if (player_rect.x > projectile.rects.x) {
+                projectile.rects.x += projectile_velocity;
+               
+
+            }
+            projectile.rects.y -= projectile_velocity;
+            render_rect(renderer, projectile.rects, red);
+        }
+        proj_elapsed = SDL_GetTicks() - proj_start_time;
+        if(proj_elapsed>PROJECTILE_DELAY){
+            projectiles_loaded = false;
+            
+            proj_start_time = SDL_GetTicks();
+            proj_started = false;
+            proj_elapsed = 0;
+        }
+    }
 
         
-    }
+
     if(monsters[curr_mon_on_screen()].rect.x<-100){
         projectiles_loaded = false;
     }
@@ -923,7 +1030,37 @@ int accel_projectile(){
     return 1;
 
 }
-
+void accel_player_proj(){
+    if(proj_pressed){
+        if(!player_proj_started){
+            player_proj_start_time = SDL_GetTicks();
+            player_proj_started = true;
+        }
+        else{
+            if(mouse_in_valid_zone){
+                //mouse above
+                if(mouse_y<player_rect.y){
+                    player_proj.rects.x += projectile_velocity  + track_velocity;
+                    player_proj.rects.y -= player_mouse_gap;
+                }
+                //mouse_below
+                else if(mouse_y > player_rect.y){
+                    player_proj.rects.x += projectile_velocity + track_velocity;
+                    player_proj.rects.y += player_mouse_gap;
+                }
+            }
+        }
+        render_rect(renderer, player_proj.rects,blue );
+        player_proj_elapsed = SDL_GetTicks() - player_proj_start_time;
+        if (player_proj_elapsed > PLAYER_PROJ_DELAY) {
+            player_loaded = false;
+            player_proj_start_time = SDL_GetTicks();
+            
+            player_proj_started = false;
+            player_proj_elapsed = 0;
+        }
+    }
+}
 int curr_mon_on_screen(){
     int mon_ind = 0;
     for (int k = 0; k < MAX_MONS; k++)
@@ -938,3 +1075,84 @@ int curr_mon_on_screen(){
     }
     return mon_ind;
 }
+void handle_proj_colls(){
+    //deciding damage frequency
+    if(player_hit_enemy==true){
+        if (!enemy_hp_started) {
+            enemy_hp_start_time = SDL_GetTicks();
+            enemy_hp_started = true;
+        }
+        SDL_Log("player hit enemy");
+        if(!proj_coll_started){
+            proj_coll_start = SDL_GetTicks();
+            proj_coll_started = true;
+        }
+        proj_coll_elapsed = SDL_GetTicks() - proj_coll_start;
+        if(proj_coll_elapsed > HEALTH_LOSS_DELAY){
+            SDL_Log("enemy health lost");
+            monsters[curr_mon_on_screen()].HP -= 2;//take away health
+            monsters[curr_mon_on_screen()].encountered = true;//set encountered to true so that it can be added to the battle
+            proj_coll_start = SDL_GetTicks();
+            proj_coll_started = false;
+            proj_coll_elapsed = 0;
+        }
+
+    }
+    if(enemy_hit_player==true){
+        if (!player_hp_started) {
+            player_hp_start_time = SDL_GetTicks();
+            player_hp_started = true;
+        }
+        SDL_Log("enemy hit player");
+        if (!proj_coll_started_en) {
+            proj_coll_start_en = SDL_GetTicks();
+            proj_coll_started_en= true;
+        }
+        proj_coll_elapsed_en = SDL_GetTicks() - proj_coll_start_en;
+        if (proj_coll_elapsed_en > HEALTH_LOSS_DELAY) {
+            SDL_Log("player health lost");
+            player_hp -= 2;
+            proj_coll_start_en = SDL_GetTicks();
+            proj_coll_started_en = false;
+            proj_coll_elapsed_en = 0;
+        }
+
+
+    }
+    //displaying HP numbers
+    if(enemy_hp_started){
+        snprintf(mon_hp_buff, sizeof(mon_hp_buff), "%d", monsters[curr_mon_on_screen()].HP);
+        render_text(monsters[curr_mon_on_screen()].rect.x, monsters[curr_mon_on_screen()].rect.y, white, mon_hp_buff);
+        enemy_hp_elapsed = SDL_GetTicks() - enemy_hp_start_time;
+    }
+    if(enemy_hp_elapsed > enemy_hp_delay){
+        enemy_hp_started = false;
+        enemy_hp_start_time = SDL_GetTicks();
+        enemy_hp_elapsed = 0;
+    }
+
+    if (player_hp_started) {
+        snprintf(player_hp_buff, sizeof(player_hp_buff), "%d", player_hp);
+        render_text(player_rect.x, player_rect.y - 40, white, player_hp_buff);
+        player_hp_elapsed = SDL_GetTicks() - player_hp_start_time;
+    }
+    if (player_hp_elapsed > player_hp_delay) {
+        player_hp_started = false;
+        player_hp_start_time = SDL_GetTicks();
+        player_hp_elapsed = 0;
+    }
+
+}
+
+void check_mouse(){
+    if(mouse_x < player_rect.x){
+        mouse_in_valid_zone = false;
+    }
+    else{
+        mouse_in_valid_zone = true;
+        player_mouse_gap = abs(player_rect.y - mouse_y)/100;
+
+    }
+}
+
+   
