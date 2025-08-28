@@ -10,7 +10,7 @@
 #define MAX_RECTS 144
 #define RECT_WIDTH 270
 #define RECT_HEIGHT 180
-#define MAX_CORNERS 100
+#define MAX_CORNERS 24
 #define WINDOW_WIDTH 3840
 #define WINDOW_HEIGHT 2160
 #define PLAYER_WIDTH 200
@@ -50,6 +50,11 @@ void render_track();
 
 void scroll_track();
 bool track_rendered = false;
+int get_last_rect();
+int check_player_at_end();
+int track_one_rc;
+int track_two_rc;
+
 
 //data structure of generated track
 typedef struct {
@@ -148,6 +153,11 @@ Monster monsters[MAX_MONS] = {
     {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
     {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
 };
+Monster battle_array[MAX_MONS];
+void populate_mon_array();
+bool mon_arr_populated;
+void render_battle_mons();
+
 
 //PROJECTILES
 typedef struct {
@@ -216,6 +226,22 @@ Uint32 player_hp_delay = 300;
 
 //BATTLE
 
+//RENDER LOCATIONS
+typedef struct {
+    SDL_FRect battle_locs[MAX_MONS];
+}RenderRects;
+static RenderRects render_rects = {
+    .battle_locs = {
+        {.x = 100, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
+        {.x = 100 + MON_WIDTH, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
+        {.x = 100 + MON_WIDTH*2, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
+        {.x = 100 + MON_WIDTH*3, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
+        {.x = 100 + MON_WIDTH * 4, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
+        {.x = 100 + MON_WIDTH * 5, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
+    }
+
+
+};
 
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
@@ -440,6 +466,21 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         accel_player_proj();
         handle_proj_colls();
         check_mouse();
+        if(check_player_at_end()==1){
+            SDL_Log("Game_state: %d", game_state+1);
+            game_state = GAMESTATE_BATTLE_START;
+            break;
+            
+        }
+        break;
+    }
+    case GAMESTATE_BATTLE_START:
+    {
+        if(!mon_arr_populated){
+            populate_mon_array();
+            mon_arr_populated = true;
+        }
+        render_battle_mons();
         break;
     }
     }
@@ -566,7 +607,7 @@ int create_corner(int corner_number) {
             corner_y += RECT_HEIGHT - RECT_HEIGHT / 2;//heading back down
         }
     }
-
+    track_one_rc = rect_count1 + rect_count2 + rect_count3;
 
     return  0;
 
@@ -680,7 +721,7 @@ int create_corner2(int corner_number) {
         }
     }
 
-
+    track_two_rc = rect_count1 + rect_count2+ rect_count3;
     return  0;
 
 }
@@ -1155,3 +1196,49 @@ void check_mouse() {
     }
 }
 
+int get_last_rect(){
+    
+    if(track_one_rc < track_two_rc){
+           
+        return 1;
+    }
+    else if (track_two_rc < track_one_rc) {
+
+        return 2;
+    }
+
+    return 0;
+}
+
+int check_player_at_end(){
+
+    if ( player_rect.x > new_track[MAX_CORNERS - 1].corner[track_one_rc - 1].x) {
+        return 1;
+    }
+    
+    if ( player_rect.x > new_track2[MAX_CORNERS - 1].corner[track_two_rc - 1].x) {
+        return 1;
+    }
+  
+    return 0;
+}
+
+void populate_mon_array(){
+    for(int i =0; i< MAX_MONS; i++)
+    {
+        if(monsters[i].encountered == true){
+            battle_array[i] = monsters[i];
+        }
+    }
+}
+void render_battle_mons(){
+
+    for(int i =0; i<MAX_MONS; i++){
+
+        battle_array[i].rect.x = render_rects.battle_locs[i].x;
+        battle_array[i].rect.y = render_rects.battle_locs[i].y;
+        render_rect(renderer, battle_array[i].rect, red);
+        render_text(battle_array[i].rect.x, battle_array[i].rect.y, white, battle_array[i].name);
+
+    }
+}
