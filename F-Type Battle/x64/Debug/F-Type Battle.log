@@ -1,54 +1,74 @@
 ﻿  FTypeMain.c
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(96,25): warning C4305: 'initializing': truncation from 'double' to 'float'
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(100,29): warning C4305: 'initializing': truncation from 'double' to 'float'
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(293,21): warning C4013: 'time' undefined; assuming extern returning int
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(361,50): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(361,117): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(373,56): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(373,124): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(391,31): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(391,97): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(421,11): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(531,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(532,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(533,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(644,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(645,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(646,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(761,25): warning C4018: '>=': signed/unsigned mismatch
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(778,21): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(815,30): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(819,42): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(826,36): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(830,48): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(839,26): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(844,36): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(890,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(895,43): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(906,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(911,43): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1000,43): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1000,55): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1038,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1055,39): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1059,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1077,38): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1095,46): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1098,38): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1123,35): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1128,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1131,44): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1136,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1144,36): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1149,34): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1152,47): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1156,34): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1165,18): warning C4090: 'function': different 'const' qualifiers
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1167,43): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1171,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1176,18): warning C4090: 'function': different 'const' qualifiers
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1178,44): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1182,32): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1194,46): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
-C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1194,57): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(99,25): warning C4305: 'initializing': truncation from 'double' to 'float'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(103,29): warning C4305: 'initializing': truncation from 'double' to 'float'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(169,157): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(169,173): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(170,160): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(170,176): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(171,156): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(171,172): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(172,156): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(172,172): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(173,156): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(173,173): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(174,156): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(174,172): warning C4047: 'initializing': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(383,21): warning C4013: 'time' undefined; assuming extern returning int
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(451,50): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(451,117): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(463,56): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(463,124): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(481,31): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(481,97): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(511,11): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(914,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(915,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(916,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1027,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1028,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1029,19): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1144,25): warning C4018: '>=': signed/unsigned mismatch
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1161,21): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1198,30): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1202,42): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1209,36): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1213,48): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1222,26): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1227,36): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1273,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1277,46): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1278,43): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1289,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1293,46): warning C4244: '-=': conversion from 'double' to 'float', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1294,43): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1383,43): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1383,55): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1421,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1438,39): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1442,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1460,38): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1478,46): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1481,38): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1506,35): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1511,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1514,44): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1519,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1527,36): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1532,34): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1535,47): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1539,34): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1548,18): warning C4090: 'function': different 'const' qualifiers
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1550,43): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1554,31): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1559,18): warning C4090: 'function': different 'const' qualifiers
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1561,44): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1565,32): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1577,46): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1577,57): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1688,35): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1692,47): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1800,32): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1805,44): warning C4244: '=': conversion from 'Uint64' to 'Uint32', possible loss of data
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1873,41): warning C4047: '=': 'int' differs in levels of indirection from 'void *'
+C:\Users\guric\source\repos\F-Type Battle\F-Type Battle\FTypeMain.c(1874,41): warning C4047: '=': 'int' differs in levels of indirection from 'void *'
   F-Type Battle.vcxproj -> C:\Users\guric\source\repos\F-Type Battle\x64\Debug\F-Type Battle.exe

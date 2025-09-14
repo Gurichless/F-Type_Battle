@@ -13,8 +13,8 @@
 #define MAX_CORNERS 24
 #define WINDOW_WIDTH 3840
 #define WINDOW_HEIGHT 2160
-#define PLAYER_WIDTH 200
-#define PLAYER_HEIGHT 200
+#define PLAYER_WIDTH 150
+#define PLAYER_HEIGHT 150
 #define ITEM_WIDTH 100
 #define ITEM_HEIGHT 100
 #define MAX_ITEMS 6
@@ -28,10 +28,13 @@
 #define HEALTH_LOSS_DELAY 60
 #define MAX_MON_HP 100
 #define MAX_PLAYER_HP 100
+#define MAX_MOVES 4
 
 static SDL_Color white = { 255, 255, 255, 255 };
 static SDL_Color red = { 255, 0, 0, 255 };
 static SDL_Color blue = { 0, 0, 255, 255 };
+static SDL_Color black = {0, 0, 0, 255 };
+static SDL_Color highlight = { 0,20,178, 175 };
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static TTF_Font* font = NULL;
@@ -128,6 +131,16 @@ SDL_FRect gen_rand_mon_locations();
 void populate_mons();
 void draw_mons();
 
+
+//MOVE STRUCT
+
+typedef struct {
+    char name[40];
+    int power;
+    char type[40];
+
+}Move;
+
 //MONS STRUCT
 typedef struct {
     char name[40];
@@ -136,28 +149,36 @@ typedef struct {
     int att;
     int def;
     int spd;
+    char wk[40];
+    char res[40];
     bool encountered;//if true when shot on track, will be added to the battle
+    int turn;//for turn order
+    int att_ind;//for battle array to easily parse who attacks who
+    int mov_ind;//for easy access to battle move index data
+    bool is_in_party; //so not to have to work in player mon_array vs battle array
     SDL_FRect rect;
+    Move moves[MAX_MOVES];
 
 }Monster;
-
+Move moves[MAX_MOVES];
 
 void render_text(float x, float y, SDL_Color color, const char* text);
 
 //MON DATA
 Monster monsters[MAX_MONS] = {
-    {.name = "test0", .type = "type0", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test1", .type = "type1", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test2", .type = "type2", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test3", .type = "type3", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
-    {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 100,.encountered = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}},
+    {.name = "test0", .type = "type0", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 101, .wk ="A", .res ="B", .encountered = false,.turn= 1, .att_ind = NULL, .mov_ind= NULL,.is_in_party=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name ="mov", .power=10, .type= "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
+    {.name = "test1", .type = "type1", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 104,.wk = "A", .res = "B", .encountered = false, .turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
+    {.name = "test2", .type = "type2", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 109,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
+    {.name = "test3", .type = "type3", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 103,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL, .is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
+    {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 106,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL, .mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
+    {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 102,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
 };
-Monster battle_array[MAX_MONS];
+Monster battle_array[MAX_MONS+2];//with player mons added
+Monster player_mons[2];
 void populate_mon_array();
 bool mon_arr_populated;
 void render_battle_mons();
-
+void init_player_mons();
 
 //PROJECTILES
 typedef struct {
@@ -201,9 +222,22 @@ typedef enum {
     GAMESTATE_TRACK,
     GAMESTATE_BATTLE_START,
 
+
 }GameState;
 
 GameState game_state = GAMESTATE_TRACK;
+//MENU STATE ENUM(to be checked when in relevant states in nested switch)
+typedef enum {
+    MENUSTATE_MAIN,
+    MENUSTATE_FIGHT1,
+    MENUSTATE_FIGHT2,
+    MENUSTATE_FIGHT3,//the same as 1 but for the 2nd mon
+    MENUSTATE_FIGHT4,//the same as 2 but for the 2nd mon
+    MENUSTATE_APPLY_ATT,
+    MENUSTATE_NONE,//empty menu state
+}MenuState;
+
+MenuState menu_state = MENUSTATE_MAIN;
 
 //MOUSE
 bool mouse_in_valid_zone = true;
@@ -228,7 +262,8 @@ Uint32 player_hp_delay = 300;
 
 //RENDER LOCATIONS
 typedef struct {
-    SDL_FRect battle_locs[MAX_MONS];
+    SDL_FRect battle_locs[MAX_MONS+2];
+    SDL_FRect battle_menu[5];
 }RenderRects;
 static RenderRects render_rects = {
     .battle_locs = {
@@ -238,10 +273,65 @@ static RenderRects render_rects = {
         {.x = 100 + MON_WIDTH*3, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
         {.x = 100 + MON_WIDTH * 4, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
         {.x = 100 + MON_WIDTH * 5, .y = 400, .w = MON_WIDTH, .h = MON_HEIGHT},
+        {.x = 100, .y = 900, .w = MON_WIDTH, .h = MON_HEIGHT},//player mon 1
+        {.x = 100 + MON_WIDTH, .y = 900, .w = MON_WIDTH, .h = MON_HEIGHT}//player mon 2
+    },
+    .battle_menu = {
+        //background
+        {.x = WINDOW_WIDTH - 400, .y = WINDOW_HEIGHT -500, .w= 600, .h = 400},
+        // MENU DESIGN, 4 rects that will be used for all information
+    {.x = WINDOW_WIDTH - 400 + 50, .y = WINDOW_HEIGHT - 200 - 50 - 150, .w = 150, .h = 100  },
+        {.x = WINDOW_WIDTH - 400 + 200, .y = WINDOW_HEIGHT - 200 - 50 - 150, .w = 150, .h = 100  },
+        {.x = WINDOW_WIDTH - 400 + 50, .y = WINDOW_HEIGHT - 200 - 50, .w = 150, .h = 100  },
+        {.x = WINDOW_WIDTH - 400 + 200, .y = WINDOW_HEIGHT - 200 - 50, .w = 150, .h = 100  },
+
+        
+        
     }
 
 
 };
+//MENU RENDERING
+void render_menu_hl(int ind);
+void render_bm_moves(int mon_ind);
+void render_bm_main();
+void render_bm_bg();
+
+int hl_ind=1;//index of menu highlight
+int player_mon_ind = 0;
+bool supress_menu_press = false;
+bool menu_sup_started;
+Uint32 menu_sup_start_time;
+Uint32 menu_sup_elapsed;
+Uint32 menu_sup_delay=500;
+void handle_menu_press();
+void render_mon_hl(int ind);
+int get_enemy_count();
+int enemy_count;
+bool enemy_count_gotten;
+void decide_turn_order(size);
+bool turns_decided;
+Monster* dynamic_battle_array;
+int allocate_dynamic_battle_arr();
+int dynamic_size;
+bool battle_hp_started;
+Uint32 battle_hp_start_time;
+Uint32 battle_hp_elapsed;
+Uint32 battle_hp_delay = 500;
+int apply_attacks(int i, Monster *target, Monster *attacker);
+bool attacks_applied;
+char battle_hp_buff[40];
+bool hp_buff_filled;
+int hp_ind;
+void set_enemy_decisions(Monster *mon);
+bool enemy_decisions_set;
+bool check_all_defeated();
+void reset_mon_inds();
+bool flags_reset;
+void reinit_track_vars();
+void reinit_battle_vars();
+int get_first_enemy_in_dba();
+bool hp_subbed;;
 
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
@@ -426,6 +516,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     {
         //generate track
         if (!track_generated) {
+            menu_state = MENUSTATE_NONE;
             for (int i = 0; i < MAX_CORNERS; i++) {
                 create_corner(i);
                 create_corner2(i);
@@ -467,6 +558,9 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         handle_proj_colls();
         check_mouse();
         if(check_player_at_end()==1){
+            coll_started = false;
+            coll_bottom = false;
+            coll_top = false;
             SDL_Log("Game_state: %d", game_state+1);
             game_state = GAMESTATE_BATTLE_START;
             break;
@@ -476,13 +570,302 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     }
     case GAMESTATE_BATTLE_START:
     {
+
         if(!mon_arr_populated){
+
+            init_player_mons();
             populate_mon_array();
+            if (!turns_decided) {
+                dynamic_size = allocate_dynamic_battle_arr();
+                decide_turn_order(dynamic_size);
+                supress_menu_press = true;//in case holding space
+                menu_state = MENUSTATE_MAIN;
+                turns_decided = true;
+
+            }
+
             mon_arr_populated = true;
         }
+        if(!enemy_count_gotten){
+            enemy_count = get_enemy_count();
+            enemy_count_gotten = true;
+        }
+
+        render_bm_bg();
         render_battle_mons();
+
+        switch(menu_state){
+
+            case MENUSTATE_MAIN:
+            {
+                
+                if (!flags_reset) {
+                    reinit_battle_vars();
+
+
+                    flags_reset = true;
+                }
+                render_bm_main();
+                handle_menu_press();
+                if(space_pressed && hl_ind ==1){
+                    supress_menu_press = true;
+                    SDL_Log("menu_state: %d", menu_state + 1);
+                    menu_state = MENUSTATE_FIGHT1;
+                    break;
+                }
+                if(space_pressed && hl_ind ==3){//run
+                    reinit_track_vars();
+                    flags_reset = false;
+                    game_state = GAMESTATE_TRACK;
+                }
+                if (right_pressed && hl_ind < 3) {
+                    if(!supress_menu_press){
+                        hl_ind += 1;
+                        supress_menu_press = true;
+                    }
+                }
+                if (left_pressed && hl_ind > 0) {
+                    if (!supress_menu_press) {
+                        hl_ind -= 1;
+                        supress_menu_press = true;
+                    }
+                }
+                render_menu_hl(hl_ind);
+                break;
+            }
+            case MENUSTATE_FIGHT1:
+            {
+                handle_menu_press();
+                render_bm_moves(player_mon_ind);
+                if (right_pressed && hl_ind < 4) {
+                    if(!supress_menu_press){
+                        hl_ind += 1;
+                        
+         
+                            
+                        supress_menu_press = true;
+ 
+                    }
+                }
+                if (left_pressed && hl_ind >0) {
+                    if (!supress_menu_press) {
+                        hl_ind -= 1;
+              
+                            
+                        supress_menu_press = true;
+   
+                    }
+                }
+                if(space_pressed){
+                    if (!supress_menu_press){
+                        for (int i = 0; i < dynamic_size; i++) {
+                            if (dynamic_battle_array[i].is_in_party && strcmp(player_mons[player_mon_ind].name, dynamic_battle_array[i].name)==0) {//it may be better to do ID system instead of name
+                                dynamic_battle_array[i].mov_ind = hl_ind;//set the mon's mov_ind to selected move
+                            }
+                        }
+                        supress_menu_press = true;
+                    }
+                    hl_ind =  get_first_enemy_in_dba();
+                    SDL_Log("menu_state: %d", menu_state + 1);
+                    menu_state = MENUSTATE_FIGHT2;
+                    break;
+
+                }
+                render_menu_hl(hl_ind);
+                
+                break;
+            }
+            case MENUSTATE_FIGHT2:
+            {
+                handle_menu_press();
+                render_mon_hl(hl_ind);
+                if (right_pressed && hl_ind < enemy_count) {//enemy_count used here
+                    if (!supress_menu_press) {
+                        hl_ind += 1;
+
+
+
+                        supress_menu_press = true;
+
+                    }
+                }
+                if (left_pressed && hl_ind > 0) {
+                    if (!supress_menu_press) {
+                        hl_ind -= 1;
+                        if(dynamic_battle_array[hl_ind-1].spd ==0){
+                            hl_ind -= 1;
+                        }
+
+                        supress_menu_press = true;
+
+                    }
+                }
+                if (dynamic_battle_array[hl_ind].spd == 0 && hl_ind < enemy_count || dynamic_battle_array[hl_ind].is_in_party) {//skip
+                    hl_ind += 1;
+                }
+                if(space_pressed){
+                    if(!supress_menu_press){
+                        for (int i = 0; i < dynamic_size; i++) {
+                            if (dynamic_battle_array[i].is_in_party && strcmp(player_mons[player_mon_ind].name, dynamic_battle_array[i].name) == 0) {//it may be better to do ID system instead of name
+                                dynamic_battle_array[i].att_ind = hl_ind;//set the mon's mov_ind to selected move
+                            }
+                        }
+                        player_mon_ind = 1;//set as next so moves can be rendered in next state
+                        supress_menu_press = true;
+                    }
+                    hl_ind = 1;
+                    SDL_Log("menu_state: %d", menu_state + 1);
+                    menu_state = MENUSTATE_FIGHT3;
+                    break;
+                }
+
+                break;
+            }
+            case MENUSTATE_FIGHT3:
+            {
+                handle_menu_press();
+                render_bm_moves(player_mon_ind);
+                if (right_pressed && hl_ind < 4) {
+                    if (!supress_menu_press) {
+                        hl_ind += 1;
+
+
+
+                        supress_menu_press = true;
+
+                    }
+                }
+                if (left_pressed && hl_ind > 0) {
+                    if (!supress_menu_press) {
+                        hl_ind -= 1;
+
+
+                        supress_menu_press = true;
+
+                    }
+                }
+                if (space_pressed) {
+                    if (!supress_menu_press) {
+                        for (int i = 0; i < dynamic_size; i++) {
+                            if (dynamic_battle_array[i].is_in_party && strcmp(player_mons[player_mon_ind].name, dynamic_battle_array[i].name) == 0) {
+                                dynamic_battle_array[i].mov_ind = hl_ind;//set the mon's mov_ind to selected move
+                            }
+                        }
+                        supress_menu_press = true;
+                    }
+                    hl_ind = get_first_enemy_in_dba();
+                    SDL_Log("menu_state: %d", menu_state + 1);
+                    menu_state = MENUSTATE_FIGHT4;
+                    break;
+
+                }
+                render_menu_hl(hl_ind);
+
+                break;
+            }
+            case MENUSTATE_FIGHT4:
+            {
+                handle_menu_press();
+                render_mon_hl(hl_ind);
+                if (right_pressed && hl_ind < enemy_count) {//enemy_count used here
+                    if (!supress_menu_press) {
+                        hl_ind += 1;
+
+
+
+                        supress_menu_press = true;
+
+                    }
+                }
+                if (left_pressed && hl_ind > 0) {
+                    if (!supress_menu_press) {
+                        hl_ind -= 1;
+
+
+                        supress_menu_press = true;
+
+                    }
+                }
+                if (dynamic_battle_array[hl_ind].spd == 0 && hl_ind < enemy_count || dynamic_battle_array[hl_ind].is_in_party) {//skip
+                    hl_ind += 1;
+                }
+                if (space_pressed) {
+                    if (!supress_menu_press) {
+                        for (int i = 0; i < dynamic_size; i++) {
+                            if (dynamic_battle_array[i].is_in_party && strcmp(player_mons[player_mon_ind].name, dynamic_battle_array[i].name) == 0) {//it may be better to do ID system instead of name
+                                dynamic_battle_array[i].att_ind = hl_ind;//set the mon's mov_ind to selected move
+                            }
+                        }
+                        supress_menu_press = true;
+                    }
+                    SDL_Log("menu_state: %d", menu_state + 1);
+                    menu_state = MENUSTATE_APPLY_ATT;//enter game_state where the attacks will be played out based on what was done above
+                    break;
+                }
+
+                break;
+            }
+            case MENUSTATE_APPLY_ATT:
+
+            {
+
+                //TODO set enemy's decisions based on RNG
+                if (!enemy_decisions_set) {
+                    for (int m = 0; m < dynamic_size; m++) {
+                        if (!dynamic_battle_array[m].is_in_party) {
+                            set_enemy_decisions(&dynamic_battle_array[m]);
+                        }
+                    }
+                    enemy_decisions_set = true;
+                }
+                //TODO apply the effects of the attacks within the dynamic battle array based on the indices gathered above
+                if (!attacks_applied) {
+
+                    //apply attacks 1 by 1 through the now ordered battle array
+                    if (hp_ind < dynamic_size) {
+                        if (apply_attacks(hp_ind, &dynamic_battle_array[dynamic_battle_array[hp_ind].att_ind], &dynamic_battle_array[hp_ind]) == 1) {
+                            battle_hp_elapsed = 0;
+                            hp_subbed = false;
+                            hp_ind += 1;
+                        }
+                    }
+                    else {
+                        battle_hp_elapsed = 0;
+                        attacks_applied = true;
+                    }
+                }
+                else if (attacks_applied) {
+
+                    //go back to menustate_main if at least one enemy  has HP
+                    if (check_all_defeated() == false){
+                        flags_reset = false;
+                        SDL_Log("menu_state main");
+                        menu_state = MENUSTATE_MAIN;
+                        break;
+                    }
+                    else if(check_all_defeated() == true) {
+                        reinit_track_vars();
+                        flags_reset = false;
+                        game_state = GAMESTATE_TRACK;
+
+                        break;
+                    }
+                }
+                break;
+            }
+            case MENUSTATE_NONE:
+            {
+
+                break;
+            }
+            
+        }
+
+        
         break;
     }
+
+
     }
 
     //END GAMESTATE SWITCH
@@ -891,7 +1274,7 @@ void handle_colls() {
             coll_started = true;
         }
         if (coll_started) {
-            player_rect.y += player_velocity * 2;
+            player_rect.y += player_velocity * 1.5;
             coll_elapsed = SDL_GetTicks() - coll_start_time;
         }
         if (coll_elapsed > 100) {
@@ -907,7 +1290,7 @@ void handle_colls() {
             coll_started = true;
         }
         if (coll_started) {
-            player_rect.y -= player_velocity * 2;
+            player_rect.y -= player_velocity * 1.5;
             coll_elapsed = SDL_GetTicks() - coll_start_time;
         }
         if (coll_elapsed > 100) {
@@ -1229,16 +1612,315 @@ void populate_mon_array(){
         if(monsters[i].encountered == true){
             battle_array[i] = monsters[i];
         }
+
     }
+    battle_array[MAX_MONS ] = player_mons[0];
+    battle_array[MAX_MONS + 1] = player_mons[1];
+    battle_array[MAX_MONS].is_in_party = true;
+    battle_array[MAX_MONS+1].is_in_party = true;//set the players mons is in party bool here
+    for (int j = 0; j <MAX_MONS +2; j++) {
+        SDL_Log("intial mbattle array spds: %d", battle_array[j].spd);
+    }
+
 }
 void render_battle_mons(){
-
-    for(int i =0; i<MAX_MONS; i++){
-
-        battle_array[i].rect.x = render_rects.battle_locs[i].x;
-        battle_array[i].rect.y = render_rects.battle_locs[i].y;
-        render_rect(renderer, battle_array[i].rect, red);
-        render_text(battle_array[i].rect.x, battle_array[i].rect.y, white, battle_array[i].name);
+    int count=0;
+    for(int i =0; i<dynamic_size; i++){
+        if(dynamic_battle_array[i].encountered && !dynamic_battle_array[i].is_in_party){
+            dynamic_battle_array[i].rect.x = render_rects.battle_locs[i].x;
+            dynamic_battle_array[i].rect.y = render_rects.battle_locs[i].y;
+            render_rect(renderer, dynamic_battle_array[i].rect, red);
+            render_text(dynamic_battle_array[i].rect.x, dynamic_battle_array[i].rect.y, white, dynamic_battle_array[i].name);
+        }
 
     }
+    for(int j =0; j< dynamic_size; j++){
+        if(dynamic_battle_array[j].is_in_party){
+
+            dynamic_battle_array[j].rect.x = render_rects.battle_locs[MAX_MONS+count].x;
+            dynamic_battle_array[j].rect.y = render_rects.battle_locs[MAX_MONS+count].y;
+            render_rect(renderer, dynamic_battle_array[j].rect, blue);
+            render_text(dynamic_battle_array[j].rect.x, dynamic_battle_array[j].rect.y, white, dynamic_battle_array[j].name);
+            count++;
+        }
+    }
+}
+
+//set initial player party
+void init_player_mons(){
+    //arbitrary for now
+    player_mons[0] = monsters[0];
+    player_mons[1] = monsters[1];
+    SDL_Log("Player mon 0,1 speeds %d %d", player_mons[0].spd, player_mons[1].spd);
+}
+
+//renders background of battle menu
+void render_bm_bg(){
+    render_rect(renderer, render_rects.battle_menu[0], white);
+}
+//render onto the battle menu rects the main info
+void render_bm_main(){
+    render_text(render_rects.battle_menu[1].x, render_rects.battle_menu[1].y, black, "Fight");
+    render_text(render_rects.battle_menu[2].x, render_rects.battle_menu[2].y, black, "Item");
+    render_text(render_rects.battle_menu[3].x, render_rects.battle_menu[3].y, black, "Run");
+}
+
+//when  in the state where move menu is selected, render the moves on the battle menu rects, based on an index of which of the two player mons turn it is
+void render_bm_moves(int mon_ind){
+    
+
+    render_text(render_rects.battle_menu[1].x, render_rects.battle_menu[1].y, black, player_mons[mon_ind].moves[0].name);
+    render_text(render_rects.battle_menu[2].x, render_rects.battle_menu[2].y, black, player_mons[mon_ind].moves[1].name);
+    render_text(render_rects.battle_menu[3].x, render_rects.battle_menu[3].y, black, player_mons[mon_ind].moves[2].name);
+    render_text(render_rects.battle_menu[4].x, render_rects.battle_menu[4].y, black, player_mons[mon_ind].moves[3].name);
+}
+//highlight a low alpha rect over the selkected index which icreases or decreases with A and D/L and R (first always render by default)
+void render_menu_hl(int ind){
+    render_rect(renderer, render_rects.battle_menu[ind], highlight);
+}
+
+void handle_menu_press(){
+    if(supress_menu_press){
+        left_pressed = false;
+        right_pressed = false;
+        space_pressed = false;
+        if(!menu_sup_started){
+            menu_sup_start_time = SDL_GetTicks();
+            menu_sup_started = true;
+        }
+        else{
+            menu_sup_elapsed = SDL_GetTicks() - menu_sup_start_time;
+
+        }
+    }
+    if (menu_sup_elapsed >= menu_sup_delay) {
+        supress_menu_press = false;
+        menu_sup_elapsed = 0;
+    }
+
+}
+
+//highlight the selected enemy mon to attack
+void render_mon_hl(int ind){
+    render_rect(renderer, dynamic_battle_array[ind].rect, highlight);
+
+}
+
+int get_enemy_count(){
+    int c = 0;
+    for(int i = 0; i< dynamic_size; i++){
+        if(dynamic_battle_array[i].encountered==true && !dynamic_battle_array[i].is_in_party){
+            c++;
+        }
+    }
+    return c;
+}
+
+//hard to wrap head around since some of the mons will be null, so how to create and sort a clean array?
+void decide_turn_order(size){
+
+
+    Monster temp[MAX_MONS+1];
+    int i, x;
+    bool swapped;
+    for(x=0; x<size;x++){
+        swapped = false;
+        for(i=0; i<size-1-x; i++){
+
+                if(dynamic_battle_array[i].spd < dynamic_battle_array[i+1].spd ){
+
+                    dynamic_battle_array[i].turn += 1;
+                    temp[i] = dynamic_battle_array[i];
+                    dynamic_battle_array[i] = dynamic_battle_array[i + 1];
+                    dynamic_battle_array[i + 1] = temp[i];
+                    swapped = true;
+                }
+
+
+            }
+        if(!swapped){
+            break;
+        }
+    }
+    
+
+    for(int j=0; j<size; j++){
+        SDL_Log("%d", dynamic_battle_array[j].spd);
+    }
+
+}
+
+int allocate_dynamic_battle_arr(void) {
+    // Step 1: Count valid monsters
+    int count = 0;
+    for (int s = 0; s < MAX_MONS + 2; s++) {
+        if (battle_array[s].spd != 0) {
+            count++;
+        }
+    }
+
+    // Step 2: Allocate exact amount
+    dynamic_battle_array = malloc(count * sizeof(Monster));
+    if (!dynamic_battle_array) {
+        SDL_Log( "malloc failed\n");
+        return SDL_APP_FAILURE;
+    }
+
+    // Step 3: Copy only the valid entries
+    int j = 0; // write index
+    for (int i = 0; i < MAX_MONS + 2; i++) {
+        if (battle_array[i].spd != 0) {
+            dynamic_battle_array[j] = battle_array[i];
+            j++;
+        }
+    }
+    SDL_Log("Succ");
+    return j;
+
+
+}
+
+int apply_attacks(int i, Monster *target, Monster *attacker){
+    
+    
+    
+
+    //subtract from the HP of the attack index mon the move index of moves of the current monster
+    if(! hp_subbed){
+        target->HP -= attacker->moves[attacker->mov_ind].power;
+        hp_subbed = true;
+    }
+    SDL_Log("%s HP reduced by %s attack ", target->name, attacker->name);
+    if(!hp_buff_filled){
+        snprintf(battle_hp_buff, sizeof(battle_hp_buff), "%d", target->HP);
+        hp_buff_filled = true;
+    }
+    
+    if(!battle_hp_started){
+        battle_hp_start_time = SDL_GetTicks();
+        battle_hp_started = true;
+    }
+    else{
+        render_text(target->rect.x, target->rect.y-200, white, battle_hp_buff);
+        battle_hp_elapsed = SDL_GetTicks() - battle_hp_start_time;
+    }
+
+    if(battle_hp_elapsed > battle_hp_delay){
+            
+        battle_hp_started = false;
+
+        hp_buff_filled = false;
+
+        return 1;
+
+    }
+
+    return 0;
+}
+
+void set_enemy_decisions(Monster *mon){
+    int mov_size = 0;
+    int mov_ind = 0;//the index of the move they will use
+    int attack_ind = 0;//the index of the player mon that it will attack
+    int c_1 = 0;
+    int c_2 = 0;//two choices indexes of the dynamic battle array of player owned mons
+    int roll = 0;//50 50 roll
+    mov_size = sizeof(mon->moves) / sizeof(mon->moves[0]);
+
+    mon->mov_ind = rand() % mov_size;
+
+    for(int i =0; i<dynamic_size; i++){
+        if(dynamic_battle_array[i].is_in_party){
+            c_1 = i;
+        }
+    }
+    for(int j =0; j<dynamic_size; j++){
+        if(j!=c_1 && dynamic_battle_array[j].is_in_party){
+            c_2 = j;
+        }
+    }
+    roll = rand() % 2;
+    if(roll>0){
+        mon->att_ind = c_1;
+    }
+    else{
+        mon->att_ind = c_2;
+    }
+}
+bool check_all_defeated(){
+    for(int i =0; i<dynamic_size; i++)
+    {
+        if(!dynamic_battle_array[i].is_in_party && !dynamic_battle_array[i].spd==0){
+            if(dynamic_battle_array[i].HP>0){
+                return false;
+            }
+        }
+    
+        
+    }
+    return true;
+   
+
+ 
+
+
+}
+//TODO: CHeck all player mons dead fail condition
+
+
+void reset_mon_inds(){
+    for(int i = 0; i<dynamic_size; i++){
+        dynamic_battle_array[i].att_ind = NULL;
+        dynamic_battle_array[i].mov_ind = NULL;
+    }
+}
+
+void reinit_track_vars(){
+    mon_arr_populated = false;
+    track_generated = false;
+    track_populated = false;
+    projectiles_loaded = false;
+    player_loaded = false;
+    player_rect.x = 100.0, player_rect.y = WINDOW_HEIGHT / 2, player_rect.w = PLAYER_WIDTH, player_rect.h = PLAYER_HEIGHT;
+    center_line_y = WINDOW_HEIGHT / 2 + 300;
+    center_line_y2 = WINDOW_HEIGHT / 2 - 600;
+    corner_x = 100.0;
+    corner_x2 = 100.0;
+    for(int i =0; i< MAX_MONS; i ++){
+        monsters[i].HP = 100;//need to change this for player mons once out of this test phase
+        monsters[i].encountered = false;
+        battle_array[i].encountered = false;
+        battle_array[i].is_in_party = false;
+        battle_array[i].HP = 100;
+        battle_array[i].spd = 0;
+    }
+    free(dynamic_battle_array);
+    dynamic_battle_array = NULL;
+    dynamic_size = 0;
+}
+
+void reinit_battle_vars(){
+    hl_ind = 1;
+    turns_decided = false;
+    enemy_count_gotten = false;
+    enemy_decisions_set = false;
+    attacks_applied = false;
+    supress_menu_press = false;
+    space_pressed = false;
+    right_pressed = false;
+    left_pressed = false;
+    right_pressed = false;
+    up_pressed = false;
+    player_mon_ind = 0;
+    hp_ind = 0;
+    reset_mon_inds();
+}
+//replace highlight index with first enemy index upon enemy monster selection state in battle with this funnction
+int get_first_enemy_in_dba(){
+    for(int i=0; i<dynamic_size; i++){
+        if(dynamic_battle_array[i].encountered){
+            return i;
+        }
+    }
+    return -1;
 }
