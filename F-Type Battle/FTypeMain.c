@@ -188,6 +188,7 @@ void init_player_mons();
 //PROJECTILES
 typedef struct {
     SDL_FRect rects;
+    char type[40];//ie sine wave
 }Projectile;
 Projectile projectile;
 Projectile player_proj;
@@ -206,7 +207,10 @@ bool proj_pressed;
 bool player_proj_started;
 Uint32 player_proj_start_time;
 Uint32 player_proj_elapsed;
+//projectile variants
 void accel_player_proj();
+void accel_player_proj_sin();
+
 void load_player_proj();
 bool player_loaded;
 bool enemy_hit_player = false;
@@ -1467,7 +1471,7 @@ void accel_player_proj() {
         }
         else {
             if (mouse_in_valid_zone) {
-                player_proj.rects.y += sin(sqrt(player_proj.rects.x)) * track_velocity;
+                
                 //mouse above
                 if (mouse_y < player_rect.y) {
                     
@@ -1482,6 +1486,41 @@ void accel_player_proj() {
             }
         }
         if (player_proj.rects.x< WINDOW_WIDTH && player_proj.rects.x > -500){
+            render_rect(renderer, player_proj.rects, blue);
+        }
+        player_proj_elapsed = SDL_GetTicks() - player_proj_start_time;
+        if (player_proj_elapsed > PLAYER_PROJ_DELAY) {
+            player_loaded = false;
+            player_proj_start_time = SDL_GetTicks();
+
+            player_proj_started = false;
+            player_proj_elapsed = 0;
+        }
+    }
+}
+void accel_player_proj_sin() {
+    if (proj_pressed) {
+        if (!player_proj_started) {
+            player_proj_start_time = SDL_GetTicks();
+            player_proj_started = true;
+        }
+        else {
+            if (mouse_in_valid_zone) {
+                player_proj.rects.y += sin(sqrt(player_proj.rects.x)) * track_velocity;//sine wave, can perhaps merge this into previous func conditionally once setting up  chack of type of projectile
+                //mouse above
+                if (mouse_y < player_rect.y) {
+
+                    player_proj.rects.x += projectile_velocity + track_velocity;
+                    player_proj.rects.y -= player_mouse_gap;
+                }
+                //mouse_below
+                else if (mouse_y > player_rect.y) {
+                    player_proj.rects.x += projectile_velocity + track_velocity;
+                    player_proj.rects.y += player_mouse_gap;
+                }
+            }
+        }
+        if (player_proj.rects.x< WINDOW_WIDTH && player_proj.rects.x > -500) {
             render_rect(renderer, player_proj.rects, blue);
         }
         player_proj_elapsed = SDL_GetTicks() - player_proj_start_time;
