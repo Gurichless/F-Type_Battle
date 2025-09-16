@@ -23,8 +23,8 @@
 #define MON_HEIGHT 200
 #define PROJECTILE_WIDTH 50
 #define PROJECTILE_HEIGHT 50
-#define PROJECTILE_DELAY 600
-#define PLAYER_PROJ_DELAY 400
+#define PROJECTILE_DELAY 1200
+#define PLAYER_PROJ_DELAY 800
 #define HEALTH_LOSS_DELAY 60
 #define MAX_MON_HP 100
 #define MAX_PLAYER_HP 100
@@ -96,11 +96,11 @@ bool space_pressed;
 bool acc_started;
 bool deacc_started;
 
-float player_velocity = 0.2;//for button input controls(without culling must be higher due to hardware slowdown. might be something of a problem once release build)
-float track_velocity = 10.0;
-float max_track_vel = 25.0;
+float player_velocity = 0.2*20;//for button input controls(without culling must be higher due to hardware slowdown. might be something of a problem once release build)
+float track_velocity = 10.0 * 2;
+float max_track_vel = 25.0 * 2;
 float acceleration = 0.0;//unused?
-float projectile_velocity = 0.4;
+float projectile_velocity = 0.4 * 20;
 
 Uint32 acc_start_time;
 Uint32 acc_elapsed;
@@ -112,9 +112,12 @@ int check_rect_overlap(SDL_FRect* a, SDL_FRect* one, SDL_FRect* two);
 int track_coll_count;
 bool coll_top;
 bool coll_bottom;
-bool coll_started;
-Uint32 coll_start_time;
-Uint32 coll_elapsed;
+bool coll_started_t;
+Uint32 coll_start_time_t;
+Uint32 coll_elapsed_t;
+bool coll_started_b;
+Uint32 coll_start_time_b;
+Uint32 coll_elapsed_b;
 void handle_colls();
 void accelerate();
 
@@ -193,7 +196,7 @@ Uint32 proj_elapsed;
 
 //gets current mon on screen so coord can be loaded
 int curr_mon_on_screen();
-
+int get_other_on_screen();
 void load_projectile();
 bool projectiles_loaded = false;
 int accel_projectile();
@@ -206,6 +209,7 @@ void load_player_proj();
 bool player_loaded;
 bool enemy_hit_player = false;
 bool player_hit_enemy = false;
+bool player_hit_other_enemy = false;
 //projectile colls
 void handle_proj_colls();//function handles timing of when HP is subtracted, and how longit is displayed
 Uint32 proj_coll_start;
@@ -251,13 +255,14 @@ const char player_hp_buff[40];
 const char mon_hp_buff[40];
 bool player_hp_started;
 bool enemy_hp_started;
+bool other_enemy_hp_started;
 Uint32 player_hp_start_time;
 Uint32 enemy_hp_start_time;
 Uint32 player_hp_elapsed;
 Uint32 enemy_hp_elapsed;
 Uint32 enemy_hp_delay = 300;
 Uint32 player_hp_delay = 300;
-
+void collision_events();
 //BATTLE
 
 //RENDER LOCATIONS
@@ -333,6 +338,12 @@ void reinit_battle_vars();
 int get_first_enemy_in_dba();
 bool hp_subbed;;
 
+//FRAME TIMING
+Uint32 frame_time;
+Uint32 last_time;
+Uint32 frame_start;
+const Uint32 target_frame_time = 8; // ~8 ms per frame (1000/120)
+int opt_mult = 10;//for speed optimization
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -392,22 +403,22 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     if (event->type == SDL_EVENT_KEY_DOWN) {
         switch (event->key.key) {
         case SDLK_D:
-            if (!coll_started) {
+            if (!coll_started_t && !coll_started_b) {
                 right_pressed = true;
             }
             break;
         case SDLK_A:
-            if (!coll_started) {
+            if (!coll_started_t && !coll_started_b) {
                 left_pressed = true;
             }
             break;
         case SDLK_S:
-            if (!coll_started) {
+            if (!coll_started_t && !coll_started_b) {
                 down_pressed = true;
             }
             break;
         case SDLK_W:
-            if (!coll_started) {
+            if (!coll_started_t && !coll_started_b) {
                 up_pressed = true;
             }
             break;
@@ -445,38 +456,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
         proj_pressed = false;
     }
-    for (int i = 0; i < MAX_CORNERS; i++) {
-        for (int j = 0; j < MAX_RECTS; j++) {
-            {
-                if (abs(new_track[i].corner[j].x - player_rect.x) <= RECT_WIDTH * 2 && abs(new_track[i].corner[j].y - player_rect.y) <= RECT_HEIGHT * 2) {
-                    if (check_rect_overlap(&player_rect, &new_track[i].corner[j], &new_track2[i].corner[j]) == 1) {
-                        track_coll_count++;
-                        coll_bottom = true;
-                        SDL_Log("Collision bottom %d", track_coll_count);
-                        if (player_rect.y > new_track2[i].corner[j].y)
-                        {
-                            coll_bottom = true;
-                        }
-                    }
-
-                }
-                else if (abs(new_track2[i].corner[j].x - player_rect.x) <= RECT_WIDTH * 2 && abs(new_track2[i].corner[j].y - player_rect.y) <= RECT_HEIGHT * 2) {
-                    if (check_rect_overlap(&player_rect, &new_track[i].corner[j], &new_track2[i].corner[j]) == 1) {
-                        track_coll_count++;
-                        coll_top = true;
-                        SDL_Log("Collision top %d", track_coll_count);
-                        if (player_rect.y < new_track2[i].corner[j].y)
-                        {
-                            coll_top = true;
-                        }
-                    }
-
-                }
-
-            }
-        }
-
-    }
+    
     for (int k = 0; k < MAX_ITEMS; k++) {
         if (abs(player_rect.x - track_items.items[k].x) < PLAYER_WIDTH * 2 && abs(player_rect.y - track_items.items[k].y) < PLAYER_HEIGHT * 2) {
             if (check_rect_overlap(&player_rect, &track_items.items[k], NULL) == 1) {
@@ -484,7 +464,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
             }
         }
     }
-    if (check_rect_overlap(&monsters[curr_mon_on_screen()].rect, &player_proj.rects, NULL) == 1) {
+    if (check_rect_overlap(&player_proj.rects, &monsters[curr_mon_on_screen()].rect, &monsters[curr_mon_on_screen()].rect) == 1) {
         player_hit_enemy = true;
     }
     else {
@@ -496,7 +476,14 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     else {
         enemy_hit_player = false;
     }
-
+    if(get_other_on_screen()!=-1){
+        if (check_rect_overlap(&player_proj.rects, &monsters[get_other_on_screen()].rect, &monsters[get_other_on_screen()].rect) == 1) {
+            player_hit_other_enemy = true;
+        }
+        else{
+            player_hit_other_enemy = false;
+        }
+    }
 
     return SDL_APP_CONTINUE;
 }
@@ -509,6 +496,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     SDL_GetMouseState(&mouse_x, &mouse_y);
 
     now = SDL_GetTicks();
+    frame_start = SDL_GetTicks();
     //GAMESTATE SWITCH START
     switch (game_state) {
 
@@ -557,11 +545,14 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         accel_player_proj();
         handle_proj_colls();
         check_mouse();
+        collision_events();
         if(check_player_at_end()==1){
-            coll_started = false;
+            coll_started_t = false;
+            coll_started_b = false;
             coll_bottom = false;
             coll_top = false;
             SDL_Log("Game_state: %d", game_state+1);
+            supress_menu_press = true;//in case holding space
             game_state = GAMESTATE_BATTLE_START;
             break;
             
@@ -624,7 +615,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
                         supress_menu_press = true;
                     }
                 }
-                if (left_pressed && hl_ind > 0) {
+                if (left_pressed && hl_ind > 1) {
                     if (!supress_menu_press) {
                         hl_ind -= 1;
                         supress_menu_press = true;
@@ -647,7 +638,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
  
                     }
                 }
-                if (left_pressed && hl_ind >0) {
+                if (left_pressed && hl_ind >1) {
                     if (!supress_menu_press) {
                         hl_ind -= 1;
               
@@ -689,7 +680,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
                     }
                 }
-                if (left_pressed && hl_ind > 0) {
+                if (left_pressed && hl_ind > 1) {
                     if (!supress_menu_press) {
                         hl_ind -= 1;
                         if(dynamic_battle_array[hl_ind-1].spd ==0){
@@ -735,7 +726,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
                     }
                 }
-                if (left_pressed && hl_ind > 0) {
+                if (left_pressed && hl_ind > 1) {
                     if (!supress_menu_press) {
                         hl_ind -= 1;
 
@@ -777,7 +768,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
                     }
                 }
-                if (left_pressed && hl_ind > 0) {
+                if (left_pressed && hl_ind > 1) {
                     if (!supress_menu_press) {
                         hl_ind -= 1;
 
@@ -870,6 +861,11 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
     //END GAMESTATE SWITCH
     SDL_RenderPresent(renderer);
+    frame_time = SDL_GetTicks() - frame_start;
+    if (frame_time < target_frame_time)
+    {
+        SDL_Delay(target_frame_time - frame_time);
+    }
     return SDL_APP_CONTINUE;
 }
 
@@ -1178,10 +1174,8 @@ void move_player() {
     }
 }
 int check_rect_overlap(SDL_FRect* a, SDL_FRect* one, SDL_FRect* two) {
-    if (SDL_HasRectIntersectionFloat(a, one)) {
-        return 1;
-
-
+    if (a->x > WINDOW_WIDTH && a->x < -500) {
+        return 0;
     }
     if (two != NULL) {
 
@@ -1189,6 +1183,12 @@ int check_rect_overlap(SDL_FRect* a, SDL_FRect* one, SDL_FRect* two) {
             return 1;
         }
     }
+    if (SDL_HasRectIntersectionFloat(a, one)) {
+        return 1;
+
+
+    }
+
     return 0;
 }
 
@@ -1268,33 +1268,33 @@ float get_track_max() {
 
 void handle_colls() {
     if ((coll_top) || player_rect.y < track_min + RECT_HEIGHT * 2) {
-        if (!coll_started)
+        if (!coll_started_t)
         {
-            coll_start_time = SDL_GetTicks();
-            coll_started = true;
+            coll_start_time_t = SDL_GetTicks();
+            coll_started_t = true;
         }
-        if (coll_started) {
+        if (coll_started_t) {
             player_rect.y += player_velocity * 1.5;
-            coll_elapsed = SDL_GetTicks() - coll_start_time;
+            coll_elapsed_t = SDL_GetTicks() - coll_start_time_t;
         }
-        if (coll_elapsed > 100) {
-            coll_started = false;
+        if (coll_elapsed_t > 100) {
+            coll_started_t = false;
             coll_top = false;
         }
 
     }
     if ((coll_bottom) || player_rect.y > track_max - RECT_HEIGHT * 2) {
-        if (!coll_started)
+        if (!coll_started_b)
         {
-            coll_start_time = SDL_GetTicks();
-            coll_started = true;
+            coll_start_time_b = SDL_GetTicks();
+            coll_started_b = true;
         }
-        if (coll_started) {
+        if (coll_started_b) {
             player_rect.y -= player_velocity * 1.5;
-            coll_elapsed = SDL_GetTicks() - coll_start_time;
+            coll_elapsed_b = SDL_GetTicks() - coll_start_time_b;
         }
-        if (coll_elapsed > 100) {
-            coll_started = false;
+        if (coll_elapsed_b > 100) {
+            coll_started_b = false;
             coll_bottom = false;
         }
 
@@ -1350,7 +1350,10 @@ void populate_mons() {
 }
 void draw_mons() {
     for (int i = 0; i < MAX_MONS; i++) {
-        if (monsters[i].rect.x<WINDOW_WIDTH && monsters[i].rect.x>-500) {
+        if (monsters[i].rect.x>WINDOW_WIDTH && !monsters[i].rect.x<-500){
+            continue;//to save CPU
+        }
+        else if (monsters[i].rect.x<WINDOW_WIDTH && monsters[i].rect.x>-500) {
             render_rect(renderer, monsters[i].rect, red);
             render_text(monsters[i].rect.x, monsters[i].rect.y - 100, white, monsters[i].name);
         }
@@ -1474,7 +1477,9 @@ void accel_player_proj() {
                 }
             }
         }
-        render_rect(renderer, player_proj.rects, blue);
+        if (player_proj.rects.x< WINDOW_WIDTH && player_proj.rects.x > -500){
+            render_rect(renderer, player_proj.rects, blue);
+        }
         player_proj_elapsed = SDL_GetTicks() - player_proj_start_time;
         if (player_proj_elapsed > PLAYER_PROJ_DELAY) {
             player_loaded = false;
@@ -1489,7 +1494,8 @@ int curr_mon_on_screen() {
     int mon_ind = 0;
     for (int k = 0; k < MAX_MONS; k++)
     {
-        if (monsters[k].rect.x< WINDOW_WIDTH && monsters[k].rect.x > -500) {
+
+       if (monsters[k].rect.x< WINDOW_WIDTH && monsters[k].rect.x > -500) {
             mon_ind = k;
             if (monsters[mon_ind].rect.x < -100) {
                 projectiles_loaded = false;
@@ -1543,10 +1549,37 @@ void handle_proj_colls() {
 
 
     }
+    if (player_hit_other_enemy == true) {
+        if (!other_enemy_hp_started) {
+            enemy_hp_start_time = SDL_GetTicks();
+            other_enemy_hp_started = true;
+        }
+        SDL_Log("player hit enemy");
+        if (!proj_coll_started) {
+            proj_coll_start = SDL_GetTicks();
+            proj_coll_started = true;
+        }
+        proj_coll_elapsed = SDL_GetTicks() - proj_coll_start;
+        if (proj_coll_elapsed > HEALTH_LOSS_DELAY) {
+            SDL_Log("enemy health lost");
+            monsters[get_other_on_screen()].HP -= 2;//take away health
+            monsters[get_other_on_screen()].encountered = true;//set encountered to true so that it can be added to the battle
+            proj_coll_start = SDL_GetTicks();
+            proj_coll_started = false;
+            proj_coll_elapsed = 0;
+        }
+
+    }
     //displaying HP numbers
     if (enemy_hp_started) {
+
         snprintf(mon_hp_buff, sizeof(mon_hp_buff), "%d", monsters[curr_mon_on_screen()].HP);
         render_text(monsters[curr_mon_on_screen()].rect.x, monsters[curr_mon_on_screen()].rect.y, white, mon_hp_buff);
+        enemy_hp_elapsed = SDL_GetTicks() - enemy_hp_start_time;
+    }
+    else if(other_enemy_hp_started && monsters[get_other_on_screen()].rect.x >0){//need the and statement or 0 draws in upper left of render present when no other on screen
+        snprintf(mon_hp_buff, sizeof(mon_hp_buff), "%d", monsters[get_other_on_screen()].HP);
+        render_text(monsters[get_other_on_screen()].rect.x, monsters[get_other_on_screen()].rect.y, white, mon_hp_buff);
         enemy_hp_elapsed = SDL_GetTicks() - enemy_hp_start_time;
     }
     if (enemy_hp_elapsed > enemy_hp_delay) {
@@ -1923,4 +1956,49 @@ int get_first_enemy_in_dba(){
         }
     }
     return -1;
+}
+
+int get_other_on_screen(){
+    for(int i =0; i< MAX_MONS; i++){
+        if (monsters[i].rect.x< WINDOW_WIDTH && monsters[i].rect.x > -500 && i != curr_mon_on_screen()){
+            return i;
+        }
+    }
+    return-1;
+
+}
+//abstracted away and moved from events to app iterate
+void collision_events(){
+    for (int i = 0; i < MAX_CORNERS; i++) {
+        for (int j = 0; j < MAX_RECTS; j++) {
+            {
+                if (abs(new_track[i].corner[j].x - player_rect.x) <= RECT_WIDTH * 2 && abs(new_track[i].corner[j].y - player_rect.y) <= RECT_HEIGHT * 2) {
+                    if (check_rect_overlap(&player_rect, &new_track[i].corner[j], &new_track2[i].corner[j]) == 1) {
+                        track_coll_count++;
+                        coll_bottom = true;
+                        SDL_Log("Collision bottom %d", track_coll_count);
+                        if (player_rect.y > new_track2[i].corner[j].y)
+                        {
+                            coll_bottom = true;
+                        }
+                    }
+
+                }
+                else if (abs(new_track2[i].corner[j].x - player_rect.x) <= RECT_WIDTH * 2 && abs(new_track2[i].corner[j].y - player_rect.y) <= RECT_HEIGHT * 2) {
+                    if (check_rect_overlap(&player_rect, &new_track[i].corner[j], &new_track2[i].corner[j]) == 1) {
+                        track_coll_count++;
+                        coll_top = true;
+                        SDL_Log("Collision top %d", track_coll_count);
+                        if (player_rect.y < new_track2[i].corner[j].y)
+                        {
+                            coll_top = true;
+                        }
+                    }
+
+                }
+
+            }
+        }
+
+    }
 }
