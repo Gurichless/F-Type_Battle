@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
 
 #define MAX_RECTS 144
 #define RECT_WIDTH 270
@@ -120,6 +121,7 @@ Uint32 coll_start_time_b;
 Uint32 coll_elapsed_b;
 void handle_colls();
 void accelerate();
+
 
 //ITEMS STRUCT
 typedef struct {
@@ -1465,8 +1467,10 @@ void accel_player_proj() {
         }
         else {
             if (mouse_in_valid_zone) {
+                player_proj.rects.y += sin(sqrt(player_proj.rects.x)) * track_velocity;
                 //mouse above
                 if (mouse_y < player_rect.y) {
+                    
                     player_proj.rects.x += projectile_velocity + track_velocity;
                     player_proj.rects.y -= player_mouse_gap;
                 }
@@ -1549,7 +1553,7 @@ void handle_proj_colls() {
 
 
     }
-    if (player_hit_other_enemy == true) {
+    if (player_hit_other_enemy == true && get_other_on_screen()!=-1) {//function return check to potentially fix rare WILD POINTER to &monsters[get_other_on_screen()]
         if (!other_enemy_hp_started) {
             enemy_hp_start_time = SDL_GetTicks();
             other_enemy_hp_started = true;
