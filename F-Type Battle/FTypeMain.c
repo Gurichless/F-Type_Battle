@@ -30,6 +30,7 @@
 #define MAX_MON_HP 100
 #define MAX_PLAYER_HP 100
 #define MAX_MOVES 4
+#define TRACK_WIDTH_MOD 40
 
 static SDL_Color white = { 255, 255, 255, 255 };
 static SDL_Color red = { 255, 0, 0, 255 };
@@ -67,8 +68,8 @@ typedef struct {
 
 
 }New_Corner;
-New_Corner new_track[MAX_CORNERS];
-New_Corner new_track2[MAX_CORNERS];
+New_Corner new_track[MAX_CORNERS];//bottom
+New_Corner new_track2[MAX_CORNERS];//top
 int create_corner(int corner_number);
 int create_corner2(int corner_number);
 
@@ -86,6 +87,10 @@ Uint32 last_time;
 
 void move_player();
 SDL_FRect player_rect;
+SDL_FRect ship_mon_right;
+SDL_FRect ship_mon_left;
+bool player_mons_init;
+void load_ship_mons();
 
 
 //MOVEMENT
@@ -107,7 +112,7 @@ Uint32 acc_start_time;
 Uint32 acc_elapsed;
 Uint32 deacc_start_time;
 Uint32 deacc_elapsed;
-
+void repel_around_player();
 //COLLISIONS
 int check_rect_overlap(SDL_FRect* a, SDL_FRect* one, SDL_FRect* two);
 int track_coll_count;
@@ -119,6 +124,13 @@ Uint32 coll_elapsed_t;
 bool coll_started_b;
 Uint32 coll_start_time_b;
 Uint32 coll_elapsed_b;
+Uint32 coll_tb_delay;
+bool repelling;
+Uint32 repel_start;
+Uint32 repel_elapsed;
+Uint32 repel_delay=100;
+
+
 void handle_colls();
 void accelerate();
 
@@ -135,7 +147,7 @@ void draw_track_items();
 SDL_FRect gen_rand_mon_locations();
 void populate_mons();
 void draw_mons();
-
+void check_item_pickups();
 
 //MOVE STRUCT
 
@@ -192,10 +204,12 @@ typedef struct {
 }Projectile;
 Projectile projectile;
 Projectile player_proj;
+Projectile ship_top_proj;
+Projectile ship_bottom_proj;
 bool proj_started;
 Uint32 proj_start_time;
 Uint32 proj_elapsed;
-
+void check_hit_events();
 
 //gets current mon on screen so coord can be loaded
 int curr_mon_on_screen();
@@ -209,7 +223,7 @@ Uint32 player_proj_start_time;
 Uint32 player_proj_elapsed;
 //projectile variants
 void accel_player_proj();
-void accel_player_proj_sin();
+
 
 void load_player_proj();
 bool player_loaded;
@@ -397,6 +411,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     center_line_y = WINDOW_HEIGHT / 2 + 300;
     center_line_y2 = WINDOW_HEIGHT / 2 - 600;
     player_rect.x = 100.0, player_rect.y = WINDOW_HEIGHT / 2, player_rect.w = PLAYER_WIDTH, player_rect.h = PLAYER_HEIGHT;
+    ship_mon_left.x = 100.0, ship_mon_left.y = WINDOW_HEIGHT / 2 - PLAYER_HEIGHT - 20, ship_mon_left.w = PLAYER_WIDTH, ship_mon_left.h = PLAYER_HEIGHT;
+    ship_mon_right.x = 100.0, ship_mon_right.y = WINDOW_HEIGHT / 2 + PLAYER_HEIGHT + 20, ship_mon_right.w = PLAYER_WIDTH, ship_mon_right.h = PLAYER_HEIGHT;
+    snprintf(player_proj.type,sizeof(player_proj.type), "sine");
+    snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
+    snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
+
     srand((unsigned)time(NULL)); // seed
     return SDL_APP_CONTINUE;
 }
@@ -462,33 +482,14 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
         proj_pressed = false;
     }
-    
-    for (int k = 0; k < MAX_ITEMS; k++) {
-        if (abs(player_rect.x - track_items.items[k].x) < PLAYER_WIDTH * 2 && abs(player_rect.y - track_items.items[k].y) < PLAYER_HEIGHT * 2) {
-            if (check_rect_overlap(&player_rect, &track_items.items[k], NULL) == 1) {
-                SDL_Log("Item Touched");
-            }
-        }
+    switch(game_state){
+    case GAMESTATE_TRACK:
+    {
+        check_item_pickups();
+        check_hit_events();
+
+        break;
     }
-    if (check_rect_overlap(&player_proj.rects, &monsters[curr_mon_on_screen()].rect, &monsters[curr_mon_on_screen()].rect) == 1) {
-        player_hit_enemy = true;
-    }
-    else {
-        player_hit_enemy = false;
-    }
-    if (check_rect_overlap(&player_rect, &projectile.rects, NULL) == 1) {
-        enemy_hit_player = true;
-    }
-    else {
-        enemy_hit_player = false;
-    }
-    if(get_other_on_screen()!=-1){
-        if (check_rect_overlap(&player_proj.rects, &monsters[get_other_on_screen()].rect, &monsters[get_other_on_screen()].rect) == 1) {
-            player_hit_other_enemy = true;
-        }
-        else{
-            player_hit_other_enemy = false;
-        }
     }
 
     return SDL_APP_CONTINUE;
@@ -527,11 +528,20 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
             populate_mons();
             track_populated = true;
         }
+        if(!player_mons_init){
+            init_player_mons();
+            load_ship_mons();
+            player_mons_init = true;
+        }
         render_track();
         render_rect(renderer, player_rect, white);
+        render_rect(renderer, ship_mon_left, white);
+        render_rect(renderer, ship_mon_right, white);
+        render_rect(renderer, player_mons[0].rect, blue);
+        render_rect(renderer, player_mons[1].rect, blue);
         move_player();
         handle_colls();
-
+        repel_around_player();
 
         scroll_track();
         accelerate();
@@ -657,7 +667,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
                     if (!supress_menu_press){
                         for (int i = 0; i < dynamic_size; i++) {
                             if (dynamic_battle_array[i].is_in_party && strcmp(player_mons[player_mon_ind].name, dynamic_battle_array[i].name)==0) {//it may be better to do ID system instead of name
-                                dynamic_battle_array[i].mov_ind = hl_ind;//set the mon's mov_ind to selected move
+                                dynamic_battle_array[i].mov_ind = hl_ind-1;//set the mon's mov_ind to selected move
                             }
                         }
                         supress_menu_press = true;
@@ -745,7 +755,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
                     if (!supress_menu_press) {
                         for (int i = 0; i < dynamic_size; i++) {
                             if (dynamic_battle_array[i].is_in_party && strcmp(player_mons[player_mon_ind].name, dynamic_battle_array[i].name) == 0) {
-                                dynamic_battle_array[i].mov_ind = hl_ind;//set the mon's mov_ind to selected move
+                                dynamic_battle_array[i].mov_ind = hl_ind-1;//set the mon's mov_ind to selected move
                             }
                         }
                         supress_menu_press = true;
@@ -884,6 +894,7 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result) {
 
 
 //functions
+/*TRACK FUNCTIONS*/
 int create_corner(int corner_number) {
 
     int roll;//random roll for above or below the center for the curve
@@ -1015,13 +1026,13 @@ int create_corner2(int corner_number) {
     int rect_index = 0;
     //below center line
     if (roll <= 3) {
-        y1 = center_line_y2 + 50 + rand() % 200;
-        y2 = y1 + 50 + rand() % 200;
+        y1 = center_line_y2 + 50 + rand() % TRACK_WIDTH_MOD;
+        y2 = y1 + 50 + rand() % TRACK_WIDTH_MOD;
     }
     //above center line
     else {
-        y1 = center_line_y2 - 50 - rand() % 200;
-        y2 = y1 - 50 - rand() % 200;
+        y1 = center_line_y2 - 50 - rand() % TRACK_WIDTH_MOD;
+        y2 = y1 - 50 - rand() % TRACK_WIDTH_MOD;
     }
     y1_center_diff = y1 > center_line_y2 ? y1 - center_line_y2 : center_line_y2 - y1;
     y2_y1_diff = y2 > y1 ? y2 - y1 : y1 - y2;
@@ -1159,6 +1170,8 @@ void scroll_track() {
 
         projectile.rects.x -= track_velocity;
         player_proj.rects.x -= track_velocity;
+        ship_top_proj.rects.x -= track_velocity;
+        ship_bottom_proj.rects.x -= track_velocity;
 
         last_time = SDL_GetTicks();
     }
@@ -1168,15 +1181,31 @@ void move_player() {
     //not else if if diagonal movement wanted
     if (up_pressed) {
         player_rect.y -= player_velocity;
+        ship_mon_left.y -= player_velocity;
+        ship_mon_right.y -= player_velocity;
+        player_mons[0].rect.y -= player_velocity;
+        player_mons[1].rect.y -= player_velocity;
     }
     if (down_pressed) {
         player_rect.y += player_velocity;
+        ship_mon_left.y += player_velocity;
+        ship_mon_right.y += player_velocity;
+        player_mons[0].rect.y += player_velocity;
+        player_mons[1].rect.y += player_velocity;
     }
     if (right_pressed) {
         player_rect.x += player_velocity;
+        ship_mon_left.x += player_velocity;
+        ship_mon_right.x += player_velocity;
+        player_mons[0].rect.x += player_velocity;
+        player_mons[1].rect.x += player_velocity;
     }
     if (left_pressed) {
         player_rect.x -= player_velocity;
+        ship_mon_left.x -= player_velocity;
+        ship_mon_right.x -= player_velocity;
+        player_mons[0].rect.x -= player_velocity;
+        player_mons[1].rect.x -= player_velocity;
     }
 }
 int check_rect_overlap(SDL_FRect* a, SDL_FRect* one, SDL_FRect* two) {
@@ -1273,7 +1302,7 @@ float get_track_max() {
 }
 
 void handle_colls() {
-    if ((coll_top) || player_rect.y < track_min + RECT_HEIGHT * 2) {
+    if ((coll_top) || player_rect.y < track_min + RECT_HEIGHT  ) {
         if (!coll_started_t)
         {
             coll_start_time_t = SDL_GetTicks();
@@ -1281,15 +1310,39 @@ void handle_colls() {
         }
         if (coll_started_t) {
             player_rect.y += player_velocity * 1.5;
+
+
             coll_elapsed_t = SDL_GetTicks() - coll_start_time_t;
         }
-        if (coll_elapsed_t > 100) {
+        if (coll_elapsed_t > coll_tb_delay) {
             coll_started_t = false;
             coll_top = false;
         }
 
     }
-    if ((coll_bottom) || player_rect.y > track_max - RECT_HEIGHT * 2) {
+    if ((coll_top) || ship_mon_left.y < track_min + RECT_HEIGHT) {
+        if (!coll_started_t)
+        {
+            coll_start_time_t = SDL_GetTicks();
+            coll_started_t = true;
+        }
+        if (coll_started_t) {
+
+            ship_mon_left.y += player_velocity * 1.5;
+            player_mons[0].rect.y += player_velocity * 1.5;
+            coll_elapsed_t = SDL_GetTicks() - coll_start_time_t;
+            player_mons[0].HP -= 1;
+            char mon0_hp[40];
+            snprintf(mon0_hp, sizeof(mon0_hp), "%d", player_mons[0].HP);
+            render_text(ship_mon_left.x, ship_mon_left.y - 50, white, mon0_hp);
+        }
+        if (coll_elapsed_t > coll_tb_delay) {
+            coll_started_t = false;
+            coll_top = false;
+        }
+
+    }
+    if ((coll_bottom) || player_rect.y + RECT_HEIGHT > track_max   ) {
         if (!coll_started_b)
         {
             coll_start_time_b = SDL_GetTicks();
@@ -1297,9 +1350,33 @@ void handle_colls() {
         }
         if (coll_started_b) {
             player_rect.y -= player_velocity * 1.5;
+
+  
+            coll_elapsed_b = SDL_GetTicks() - coll_start_time_b;
+            player_mons[1].HP -= 1;
+            char mon1_hp[40];
+            snprintf(mon1_hp, sizeof(mon1_hp), "%d", player_mons[1].HP);
+            render_text(ship_mon_right.x, ship_mon_right.y - 50, white, mon1_hp);
+        }
+        if (coll_elapsed_b > coll_tb_delay) {
+            coll_started_b = false;
+            coll_bottom = false;
+        }
+
+    }
+    if ((coll_bottom) || ship_mon_right.y + RECT_HEIGHT > track_max) {
+        if (!coll_started_b)
+        {
+            coll_start_time_b = SDL_GetTicks();
+            coll_started_b = true;
+        }
+        if (coll_started_b) {
+
+            ship_mon_right.y -= player_velocity * 1.5;
+            player_mons[1].rect.y -= player_velocity * 1.5;
             coll_elapsed_b = SDL_GetTicks() - coll_start_time_b;
         }
-        if (coll_elapsed_b > 100) {
+        if (coll_elapsed_b > coll_tb_delay) {
             coll_started_b = false;
             coll_bottom = false;
         }
@@ -1417,6 +1494,14 @@ void load_player_proj() {
     player_proj.rects.h = PROJECTILE_HEIGHT;
     player_proj.rects.x = player_rect.x;
     player_proj.rects.y = player_rect.y + (PROJECTILE_HEIGHT / 2);
+    ship_top_proj.rects.w = PROJECTILE_WIDTH;
+    ship_top_proj.rects.h = PROJECTILE_HEIGHT;
+    ship_top_proj.rects.x = ship_mon_left.x;
+    ship_top_proj.rects.y = ship_mon_left.y + (PROJECTILE_HEIGHT / 2);
+    ship_bottom_proj.rects.w = PROJECTILE_WIDTH;
+    ship_bottom_proj.rects.h = PROJECTILE_HEIGHT;
+    ship_bottom_proj.rects.x = ship_mon_right.x;
+    ship_bottom_proj.rects.y = ship_mon_right.y + (PROJECTILE_HEIGHT / 2);
     player_loaded = true;
 }
 int accel_projectile() {
@@ -1463,6 +1548,7 @@ int accel_projectile() {
     return 1;
 
 }
+
 void accel_player_proj() {
     if (proj_pressed) {
         if (!player_proj_started) {
@@ -1471,22 +1557,35 @@ void accel_player_proj() {
         }
         else {
             if (mouse_in_valid_zone) {
-                
+                //check for proj type here
+                if(strcmp(player_proj.type , "sine") ==0){
+                    player_proj.rects.y += sin(sqrt(player_proj.rects.x)) * track_velocity;
+                }
                 //mouse above
                 if (mouse_y < player_rect.y) {
                     
                     player_proj.rects.x += projectile_velocity + track_velocity;
                     player_proj.rects.y -= player_mouse_gap;
+                    ship_top_proj.rects.x += projectile_velocity + track_velocity;
+                    ship_top_proj.rects.y -= player_mouse_gap;
+                    ship_bottom_proj.rects.x += projectile_velocity + track_velocity;
+                    ship_bottom_proj.rects.y -= player_mouse_gap;
                 }
                 //mouse_below
                 else if (mouse_y > player_rect.y) {
                     player_proj.rects.x += projectile_velocity + track_velocity;
                     player_proj.rects.y += player_mouse_gap;
+                    ship_top_proj.rects.x += projectile_velocity + track_velocity;
+                    ship_top_proj.rects.y += player_mouse_gap;
+                    ship_bottom_proj.rects.x += projectile_velocity + track_velocity;
+                    ship_bottom_proj.rects.y += player_mouse_gap;
                 }
             }
         }
         if (player_proj.rects.x< WINDOW_WIDTH && player_proj.rects.x > -500){
             render_rect(renderer, player_proj.rects, blue);
+            render_rect(renderer, ship_top_proj.rects, blue);
+            render_rect(renderer, ship_bottom_proj.rects, blue);
         }
         player_proj_elapsed = SDL_GetTicks() - player_proj_start_time;
         if (player_proj_elapsed > PLAYER_PROJ_DELAY) {
@@ -1498,41 +1597,7 @@ void accel_player_proj() {
         }
     }
 }
-void accel_player_proj_sin() {
-    if (proj_pressed) {
-        if (!player_proj_started) {
-            player_proj_start_time = SDL_GetTicks();
-            player_proj_started = true;
-        }
-        else {
-            if (mouse_in_valid_zone) {
-                player_proj.rects.y += sin(sqrt(player_proj.rects.x)) * track_velocity;//sine wave, can perhaps merge this into previous func conditionally once setting up  chack of type of projectile
-                //mouse above
-                if (mouse_y < player_rect.y) {
 
-                    player_proj.rects.x += projectile_velocity + track_velocity;
-                    player_proj.rects.y -= player_mouse_gap;
-                }
-                //mouse_below
-                else if (mouse_y > player_rect.y) {
-                    player_proj.rects.x += projectile_velocity + track_velocity;
-                    player_proj.rects.y += player_mouse_gap;
-                }
-            }
-        }
-        if (player_proj.rects.x< WINDOW_WIDTH && player_proj.rects.x > -500) {
-            render_rect(renderer, player_proj.rects, blue);
-        }
-        player_proj_elapsed = SDL_GetTicks() - player_proj_start_time;
-        if (player_proj_elapsed > PLAYER_PROJ_DELAY) {
-            player_loaded = false;
-            player_proj_start_time = SDL_GetTicks();
-
-            player_proj_started = false;
-            player_proj_elapsed = 0;
-        }
-    }
-}
 int curr_mon_on_screen() {
     int mon_ind = 0;
     for (int k = 0; k < MAX_MONS; k++)
@@ -1681,7 +1746,141 @@ int check_player_at_end(){
   
     return 0;
 }
+int get_other_on_screen() {
+    for (int i = 0; i < MAX_MONS; i++) {
+        if (monsters[i].rect.x< WINDOW_WIDTH && monsters[i].rect.x > -500 && i != curr_mon_on_screen()) {
+            return i;
+        }
+    }
+    return-1;
 
+}
+//abstracted away and moved from events to app iterate
+void collision_events() {
+    for (int i = 0; i < MAX_CORNERS; i++) {
+        for (int j = 0; j < MAX_RECTS; j++) {
+            {
+                if (abs(new_track[i].corner[j].x - ship_mon_right.x) <= RECT_WIDTH  && abs(new_track[i].corner[j].y - ship_mon_right.y) <= RECT_HEIGHT ) {
+                    if (check_rect_overlap(&ship_mon_right, &new_track[i].corner[j], NULL) == 1) {
+                        track_coll_count++;
+                        coll_bottom = true;
+                        SDL_Log("Collision bottom %d", track_coll_count);
+                        if (ship_mon_right.y - ship_mon_right.h > new_track[i].corner[j].y)
+                        {
+                            coll_bottom = true;
+                        }
+                    }
+
+                }
+                else if (abs(new_track2[i].corner[j].x - ship_mon_left.x) <= RECT_WIDTH  && abs((new_track2[i].corner[j].y+RECT_HEIGHT) - ship_mon_left.y) <= RECT_HEIGHT ) {
+                    if (check_rect_overlap(&ship_mon_left, &new_track2[i].corner[j], NULL) == 1) {
+                        track_coll_count++;
+                        coll_top = true;
+                        SDL_Log("Collision top %d", track_coll_count);
+                        if (ship_mon_left.y < new_track2[i].corner[j].y + ship_mon_left.h)
+                        {
+                            coll_top = true;
+                        }
+                    }
+
+                }
+
+            }
+        }
+
+    }
+}
+void load_ship_mons() {
+
+    for (int i = 0; i < 2; i++) {
+        if (i % 2 != 1) {
+            player_mons[i].rect.x = ship_mon_left.x;
+            player_mons[i].rect.y = ship_mon_left.y;
+            player_mons[i].rect.w = ship_mon_left.w;
+            player_mons[i].rect.h = ship_mon_left.h;
+        }
+        else {
+            player_mons[i].rect.x = ship_mon_right.x;
+            player_mons[i].rect.y = ship_mon_right.y;
+            player_mons[i].rect.w = ship_mon_left.w;
+            player_mons[i].rect.h = ship_mon_left.h;
+
+        }
+    }
+}
+void check_hit_events() {
+    if (check_rect_overlap(&player_proj.rects, &monsters[curr_mon_on_screen()].rect, &monsters[curr_mon_on_screen()].rect) == 1) {
+        player_hit_enemy = true;
+    }
+    else {
+        player_hit_enemy = false;
+    }
+    if (check_rect_overlap(&player_rect, &projectile.rects, NULL) == 1) {
+        enemy_hit_player = true;
+    }
+    else {
+        enemy_hit_player = false;
+    }
+    if (get_other_on_screen() != -1) {
+        if (check_rect_overlap(&player_proj.rects, &monsters[get_other_on_screen()].rect, &monsters[get_other_on_screen()].rect) == 1) {
+            player_hit_other_enemy = true;
+        }
+        else if (check_rect_overlap(&ship_top_proj.rects, &monsters[get_other_on_screen()].rect, &monsters[get_other_on_screen()].rect) == 1) {
+            player_hit_other_enemy = true;
+        }
+        else if (check_rect_overlap(&ship_bottom_proj.rects, &monsters[get_other_on_screen()].rect, &monsters[get_other_on_screen()].rect) == 1) {
+            player_hit_other_enemy = true;
+        }
+        else {
+            player_hit_other_enemy = false;
+        }
+    }
+}
+void check_item_pickups() {
+    for (int k = 0; k < MAX_ITEMS; k++) {
+        if (abs(player_rect.x - track_items.items[k].x) < PLAYER_WIDTH * 2 && abs(player_rect.y - track_items.items[k].y) < PLAYER_HEIGHT * 2) {
+            if (check_rect_overlap(&player_rect, &track_items.items[k], NULL) == 1) {
+                SDL_Log("Item Touched");
+            }
+        }
+    }
+}
+
+void repel_around_player(){
+    if(abs((ship_mon_left.y +ship_mon_left.h)- ship_mon_right.y) <5 || abs(ship_mon_right.y - (ship_mon_left.y + ship_mon_left.h)) < 5|| player_rect.y + PLAYER_HEIGHT > ship_mon_right.y|| player_rect.y < ship_mon_left.y + PLAYER_HEIGHT){
+        if(!repelling){
+            repel_start = SDL_GetTicks();
+            repelling = true;
+        }
+
+    }
+    if(repelling){
+        repel_elapsed = SDL_GetTicks() - repel_start;
+        if(repel_elapsed < repel_delay){
+            if (abs((ship_mon_left.y + ship_mon_left.h) - ship_mon_right.y) < 5 || abs(ship_mon_right.y - (ship_mon_left.y + ship_mon_left.h)) < 5){
+                ship_mon_left.y -= player_velocity;
+                player_mons[0].rect.y -= player_velocity;
+                player_mons[1].rect.y += player_velocity;
+                ship_mon_right.y += player_velocity;
+            }
+            if(player_rect.y + PLAYER_HEIGHT > ship_mon_right.y){
+                player_rect.y -= player_velocity;
+            }
+            if (player_rect.y < ship_mon_left.y + PLAYER_HEIGHT) {
+                player_rect.y += player_velocity;
+            }
+        }
+
+    }
+    if (repel_elapsed > repel_delay) {
+        repelling = false;
+        repel_elapsed = 0;
+    }
+
+}
+/*TRACK FUNCTIONS END*/
+
+/*MON BATTLE FUNCTIONS*/
 void populate_mon_array(){
     for(int i =0; i< MAX_MONS; i++)
     {
@@ -1958,10 +2157,13 @@ void reinit_track_vars(){
     projectiles_loaded = false;
     player_loaded = false;
     player_rect.x = 100.0, player_rect.y = WINDOW_HEIGHT / 2, player_rect.w = PLAYER_WIDTH, player_rect.h = PLAYER_HEIGHT;
+    ship_mon_left.x = 100.0, ship_mon_left.y = WINDOW_HEIGHT / 2 - PLAYER_HEIGHT - 20, ship_mon_left.w = PLAYER_WIDTH, ship_mon_left.h = PLAYER_HEIGHT;
+    ship_mon_right.x = 100.0, ship_mon_right.y = WINDOW_HEIGHT / 2 + PLAYER_HEIGHT + 20, ship_mon_right.w = PLAYER_WIDTH, ship_mon_right.h = PLAYER_HEIGHT;
     center_line_y = WINDOW_HEIGHT / 2 + 300;
     center_line_y2 = WINDOW_HEIGHT / 2 - 600;
     corner_x = 100.0;
     corner_x2 = 100.0;
+    player_mons_init = false;
     for(int i =0; i< MAX_MONS; i ++){
         monsters[i].HP = 100;//need to change this for player mons once out of this test phase
         monsters[i].encountered = false;
@@ -2001,47 +2203,4 @@ int get_first_enemy_in_dba(){
     return -1;
 }
 
-int get_other_on_screen(){
-    for(int i =0; i< MAX_MONS; i++){
-        if (monsters[i].rect.x< WINDOW_WIDTH && monsters[i].rect.x > -500 && i != curr_mon_on_screen()){
-            return i;
-        }
-    }
-    return-1;
-
-}
-//abstracted away and moved from events to app iterate
-void collision_events(){
-    for (int i = 0; i < MAX_CORNERS; i++) {
-        for (int j = 0; j < MAX_RECTS; j++) {
-            {
-                if (abs(new_track[i].corner[j].x - player_rect.x) <= RECT_WIDTH * 2 && abs(new_track[i].corner[j].y - player_rect.y) <= RECT_HEIGHT * 2) {
-                    if (check_rect_overlap(&player_rect, &new_track[i].corner[j], &new_track2[i].corner[j]) == 1) {
-                        track_coll_count++;
-                        coll_bottom = true;
-                        SDL_Log("Collision bottom %d", track_coll_count);
-                        if (player_rect.y > new_track2[i].corner[j].y)
-                        {
-                            coll_bottom = true;
-                        }
-                    }
-
-                }
-                else if (abs(new_track2[i].corner[j].x - player_rect.x) <= RECT_WIDTH * 2 && abs(new_track2[i].corner[j].y - player_rect.y) <= RECT_HEIGHT * 2) {
-                    if (check_rect_overlap(&player_rect, &new_track[i].corner[j], &new_track2[i].corner[j]) == 1) {
-                        track_coll_count++;
-                        coll_top = true;
-                        SDL_Log("Collision top %d", track_coll_count);
-                        if (player_rect.y < new_track2[i].corner[j].y)
-                        {
-                            coll_top = true;
-                        }
-                    }
-
-                }
-
-            }
-        }
-
-    }
-}
+/*MON BATTLE FUNCTIONS END*/
