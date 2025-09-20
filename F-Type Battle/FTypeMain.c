@@ -128,7 +128,7 @@ Uint32 coll_tb_delay;
 bool repelling;
 Uint32 repel_start;
 Uint32 repel_elapsed;
-Uint32 repel_delay=100;
+Uint32 repel_delay=20;
 
 
 void handle_colls();
@@ -1857,18 +1857,29 @@ void repel_around_player(){
     if(repelling){
         repel_elapsed = SDL_GetTicks() - repel_start;
         if(repel_elapsed < repel_delay){
-            if (abs((ship_mon_left.y + ship_mon_left.h) - ship_mon_right.y) < 5 || abs(ship_mon_right.y - (ship_mon_left.y + ship_mon_left.h)) < 5){
+            if (abs((ship_mon_left.y + ship_mon_left.h+20) - ship_mon_right.y) < 5 ){
+                ship_mon_left.y -= player_velocity;
+                player_mons[0].rect.y -= player_velocity;
+
+            }
+            if(abs(ship_mon_right.y - (ship_mon_left.y + ship_mon_left.h - 20)) < 5){
+                player_mons[1].rect.y += player_velocity;
+                ship_mon_right.y += player_velocity;
+            }
+            if(player_rect.y + PLAYER_HEIGHT > ship_mon_right.y || player_rect.y  > ship_mon_right.y){
+                player_rect.y -= player_velocity*2;
+            }
+            if (player_rect.y < ship_mon_left.y + PLAYER_HEIGHT || player_rect.y < ship_mon_left.y) {
+                player_rect.y += player_velocity*2;
+            }
+            if(ship_mon_left.y> ship_mon_right.y - PLAYER_HEIGHT){
                 ship_mon_left.y -= player_velocity;
                 player_mons[0].rect.y -= player_velocity;
                 player_mons[1].rect.y += player_velocity;
                 ship_mon_right.y += player_velocity;
             }
-            if(player_rect.y + PLAYER_HEIGHT > ship_mon_right.y){
-                player_rect.y -= player_velocity;
-            }
-            if (player_rect.y < ship_mon_left.y + PLAYER_HEIGHT) {
-                player_rect.y += player_velocity;
-            }
+
+
         }
 
     }
