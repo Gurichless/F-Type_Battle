@@ -31,6 +31,21 @@
 #define MAX_PLAYER_HP 100
 #define MAX_MOVES 4
 #define TRACK_WIDTH_MOD 40
+#define TILE_WIDTH 100
+#define TILE_HEIGHT 100
+#define AREA_TILE_LIM 9216
+#define ALL_ROWS 67
+#define ALL_COLS 120
+#define ALL_AREAS 20
+#define GM_HEIGHT 30.0
+#define GM_WIDTH 30.0
+#define MAX_GM 9216
+#define GM_MARGIN 2
+#define ALL_KEYITEMS 100
+#define ALL_CHARACTERS 15
+#define MAX_GOAL_ITEMS 3
+#define MAX_DIAS 20
+#define PICKUP_RADIUS 30
 
 static SDL_Color white = { 255, 255, 255, 255 };
 static SDL_Color red = { 255, 0, 0, 255 };
@@ -40,6 +55,7 @@ static SDL_Color highlight = { 0,20,178, 175 };
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static TTF_Font* font = NULL;
+static TTF_Font* gm_font = NULL;
 float window_x_scale;
 float window_y_scale;
 int window_w, window_h;
@@ -101,6 +117,7 @@ bool down_pressed;
 bool space_pressed;
 bool acc_started;
 bool deacc_started;
+bool shift_pressed;
 
 float player_velocity = 0.2*20;//for button input controls(without culling must be higher due to hardware slowdown. might be something of a problem once release build)
 float track_velocity = 10.0 * 2;
@@ -134,7 +151,7 @@ Uint32 repel_delay=20;
 void handle_colls();
 void accelerate();
 
-
+float world_velocity = 20.0;//DEBUG change back to 5.0
 //ITEMS STRUCT
 typedef struct {
     SDL_FRect items[MAX_ITEMS];
@@ -179,7 +196,7 @@ typedef struct {
 }Monster;
 Move moves[MAX_MOVES];
 
-void render_text(float x, float y, SDL_Color color, const char* text);
+void render_text(float x, float y, SDL_Color color, const char* text, TTF_Font* font);
 
 //MON DATA
 Monster monsters[MAX_MONS] = {
@@ -245,11 +262,13 @@ bool proj_coll_started_en;
 typedef enum {
     GAMESTATE_TRACK,
     GAMESTATE_BATTLE_START,
+    GAMESTATE_WORLD,
+    GAMESTATE_GRIDMAKER,
 
 
 }GameState;
 
-GameState game_state = GAMESTATE_TRACK;
+GameState game_state = GAMESTATE_WORLD;
 //MENU STATE ENUM(to be checked when in relevant states in nested switch)
 typedef enum {
     MENUSTATE_MAIN,
@@ -364,6 +383,159 @@ Uint32 last_time;
 Uint32 frame_start;
 const Uint32 target_frame_time = 8; // ~8 ms per frame (1000/120)
 int opt_mult = 10;//for speed optimization
+
+//TILES
+
+
+typedef struct {
+    int row;
+    int col;
+}KeyItemLoc;
+typedef struct {
+    char name[40];
+    bool obtained;
+    SDL_FRect rect;
+    KeyItemLoc location;
+    int ds;//index for which dialogue this passes
+}KeyItem;
+
+typedef struct {
+    SDL_FRect* rects;//pointer for rects to be allocated
+    char loc_name[40];//name of the area
+    int row;
+    int col;
+    //SDL_Texture loc_texture;// the texture that will be used
+    bool is_walkable;
+    int area_w;
+    int area_h;
+    size_t size;//need this to be able to iterate conditionally on size for rendering
+    SDL_FRect bottom_right;//the bottom rightmost rect for easier bounds checking
+    bool is_unlockable;
+    KeyItem key;
+    //TODO texture
+} World_Area;
+
+typedef struct {
+    SDL_FRect rect;//pointer for rects to be allocated
+    int row;//under tile row and col to be cross referenced with the world tiles
+    int col;
+} Under_Tile;
+
+
+//arrays of the above types , the undertiles will be generated, and the hard coded world areas will be placed and rendered on their coordinates
+World_Area world_areas[ALL_AREAS]={
+    {NULL, "Test Area 0", 1, 1, true, 2,2,0, .bottom_right={.w=0, .h=0, .x=0, .y=0}, false},
+    {NULL, "Test Area 1", 2, 3, true, 5,10,0,  .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Test Area 2",12, 8, true, 20,10,0,  .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0},false},
+    {NULL, "Indust Ground 0", 32, 86, true, 13,13,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0},false},
+    {NULL, "Indust Ground 1", 41, 99, true, 5,9,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 2", 45, 81, true, 10,10,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 3", 44, 104, true, 6,2,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 4", 48, 104, true, 6,2,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 5", 52, 104, true, 6,2,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 6", 50, 101, true, 3,15,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 7", 55, 66, true, 25,6,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 8", 61, 71, true, 2,5,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 9", 61, 78, true, 2,5,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Indust Ground 7", 61, 87, true, 4,3,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
+    {NULL, "Blocked Area 0",  22, 23, false, 4, 8, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, true},
+
+};
+Under_Tile under_tiles[AREA_TILE_LIM];
+void init_under_tiles();
+void init_world_areas();
+int world_row = 0;
+int world_col = 1;//skip top left
+void render_world_areas();
+bool world_initiated;
+bool printed = false;
+int curr_area_size = 0;
+bool place_world_areas(int i, int row, int col);
+int tile_y_offset;
+void move_world();
+
+
+typedef struct {
+    int direction;//0,1,2,3,4 clockwise
+    Uint32 timestamp; //so we can see which cam first, therefore give priority
+}Input;
+//we only need 2 elements in the array, because only the oldest input is accepted for world movement, if nothing is left NULL, we dont accept any more input
+Input input_queue[2]= {{-1, NULL}, {-1, NULL}}; 
+bool input_queue_full();
+int queue_ind=-1;
+
+void reset_inp_queue();
+
+//grid maker
+
+SDL_FRect gm_rects[MAX_GM];
+void render_gm_rects();
+void set_gm_rects();
+bool gm_rects_set;
+char* gm_buffer[MAX_GM];
+bool gm_buffers_set;
+SDL_Texture* gm_textures[MAX_GM];
+void create_gm_texts(float x, float y, SDL_Color color, const char* text, TTF_Font* font, int i);
+
+
+
+//World characters
+
+typedef struct {
+    char buffer[80];
+}Dialogue;
+
+typedef struct {
+    int stop_ind;
+    bool passed;
+}DialogueStop;//a dialogue stop ind perhaps should never be 0, so we can check that condition, and decide if one exists at the next index in the ds array
+
+typedef struct {
+    char name[40];
+    SDL_FRect rect;
+    int lrow;
+    int lcol;
+    Dialogue dialogues[MAX_DIAS];//an array of 20 char buffers that are 80 chars wide each, will be initiated with a function TODO
+    KeyItem goal_items[MAX_GOAL_ITEMS]; //an array of potential key items that the character wants to the player to obtain for matcing and deciding goals achieved
+    KeyItem reward_items[MAX_GOAL_ITEMS]; //an array of potential reward key items for goals achieved
+    DialogueStop dialogue_stops[MAX_GOAL_ITEMS]; //an array of 3 int/ bool, each int of which has the value of the stopping point of the index in dialogues, and a bool to flag if it can be passed based on key item conditions
+    int ds_ind;//to track progression through additional dialogue stops(if any)
+}Character;
+
+typedef struct {
+    SDL_FRect rect;
+    int lrow;
+    int lcol;
+    KeyItem key_items[ALL_KEYITEMS];
+}WorldPlayer;
+
+WorldPlayer world_player = { .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = (WINDOW_WIDTH / 2) - (TILE_WIDTH / 2), .y = (WINDOW_HEIGHT / 2) - (TILE_HEIGHT / 2) }, .lrow = 1,.lcol = 1 };//will decide inital starting point and other location force changes with lrow and lcol
+
+Character characters [ALL_CHARACTERS] = {
+    {.name ="testy_tim", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 32, 86}
+};
+KeyItem world_goal_items[ALL_KEYITEMS];
+void init_char_dialogues();
+void init_character_locs();
+void render_characters();
+void init_key_items();
+bool supress_interact;
+bool entered_dia;
+void progress_character_dia();
+int handle_character_interact();
+int get_next_empty_keyitem();
+int interact_char_ind;
+void render_key_items();
+void handle_key_item_pickup();
+int dia_ind = 0;
+int foo;
+void collisions_world();
+bool world_vel_inverted;
+Uint32 vel_inv_start;
+Uint32 vel_inv_elapsed;
+Uint32 vel_inv_delay=100;
+bool world_player_coll;
+void unlock_areas();
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -408,6 +580,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         SDL_Quit();
         return SDL_APP_FAILURE;
     }
+    gm_font = TTF_OpenFont("./fonts/RobotoMono-Regular.ttf", 8);
+    if (!gm_font) {
+        SDL_Log("Couldn't load font: %s", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        TTF_Quit();
+        SDL_Quit();
+        return SDL_APP_FAILURE;
+    }
     center_line_y = WINDOW_HEIGHT / 2 + 300;
     center_line_y2 = WINDOW_HEIGHT / 2 - 600;
     player_rect.x = 100.0, player_rect.y = WINDOW_HEIGHT / 2, player_rect.w = PLAYER_WIDTH, player_rect.h = PLAYER_HEIGHT;
@@ -427,35 +608,41 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
         return SDL_APP_SUCCESS;
     }
     if (event->type == SDL_EVENT_KEY_DOWN) {
-        switch (event->key.key) {
-        case SDLK_D:
-            if (!coll_started_t && !coll_started_b) {
-                right_pressed = true;
+        if (!input_queue_full()) {
+            switch (event->key.key) {
+            case SDLK_D:
+                if (!coll_started_t && !coll_started_b) {
+                    right_pressed = true;
+                }
+                break;
+            case SDLK_A:
+                if (!coll_started_t && !coll_started_b) {
+                    left_pressed = true;
+                }
+                break;
+            case SDLK_S:
+                if (!coll_started_t && !coll_started_b) {
+                    down_pressed = true;
+                }
+                break;
+            case SDLK_W:
+                if (!coll_started_t && !coll_started_b) {
+                    up_pressed = true;
+                }
+                break;
+            case SDLK_SPACE:
+                space_pressed = true;
+                break;
+            case SDLK_LSHIFT:
+                shift_pressed = true;
+                break;
+            default:
+                break;
             }
-            break;
-        case SDLK_A:
-            if (!coll_started_t && !coll_started_b) {
-                left_pressed = true;
-            }
-            break;
-        case SDLK_S:
-            if (!coll_started_t && !coll_started_b) {
-                down_pressed = true;
-            }
-            break;
-        case SDLK_W:
-            if (!coll_started_t && !coll_started_b) {
-                up_pressed = true;
-            }
-            break;
-        case SDLK_SPACE:
-            space_pressed = true;
-            break;
-        default:
-            break;
         }
     }
     if (event->type == SDL_EVENT_KEY_UP) {
+        reset_inp_queue();
         switch (event->key.key) {
         case SDLK_D:
             right_pressed = false;
@@ -871,7 +1058,51 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         
         break;
     }
+    case GAMESTATE_WORLD:
+    {
+        if(! world_initiated){
+            init_under_tiles();
+            init_world_areas();
+            /*for (int w = 0; w < ALL_AREAS; w++) {
+               if (place_world_areas(w, world_row, world_col)) {
+                    //w++;
+                }
 
+            }*/
+            init_character_locs();
+            init_char_dialogues();
+            init_key_items();
+            SDL_Log("world initiated");
+            world_initiated = true;
+
+        }
+
+        render_world_areas();
+        render_rect(renderer, world_player.rect, white);
+
+        render_characters();
+        render_key_items();
+ 
+        handle_character_interact();
+
+
+        progress_character_dia(interact_char_ind);
+        
+        handle_key_item_pickup();
+        move_world();
+        collisions_world();
+        unlock_areas();
+        
+        break;
+    }
+    case GAMESTATE_GRIDMAKER:
+    {
+        if(!gm_rects_set){
+            set_gm_rects();
+
+        }
+        render_gm_rects();
+    }
 
     }
 
@@ -1334,7 +1565,7 @@ void handle_colls() {
             player_mons[0].HP -= 1;
             char mon0_hp[40];
             snprintf(mon0_hp, sizeof(mon0_hp), "%d", player_mons[0].HP);
-            render_text(ship_mon_left.x, ship_mon_left.y - 50, white, mon0_hp);
+            render_text(ship_mon_left.x, ship_mon_left.y - 50, white, mon0_hp, font);
         }
         if (coll_elapsed_t > coll_tb_delay) {
             coll_started_t = false;
@@ -1356,7 +1587,7 @@ void handle_colls() {
             player_mons[1].HP -= 1;
             char mon1_hp[40];
             snprintf(mon1_hp, sizeof(mon1_hp), "%d", player_mons[1].HP);
-            render_text(ship_mon_right.x, ship_mon_right.y - 50, white, mon1_hp);
+            render_text(ship_mon_right.x, ship_mon_right.y - 50, white, mon1_hp, font);
         }
         if (coll_elapsed_b > coll_tb_delay) {
             coll_started_b = false;
@@ -1438,12 +1669,12 @@ void draw_mons() {
         }
         else if (monsters[i].rect.x<WINDOW_WIDTH && monsters[i].rect.x>-500) {
             render_rect(renderer, monsters[i].rect, red);
-            render_text(monsters[i].rect.x, monsters[i].rect.y - 100, white, monsters[i].name);
+            render_text(monsters[i].rect.x, monsters[i].rect.y - 100, white, monsters[i].name, font);
         }
     }
 }
 
-void render_text(float x, float y, SDL_Color color, const char* text)
+void render_text(float x, float y, SDL_Color color, const char* text, TTF_Font* font)
 {
     if (!text || !font || !renderer) {
         SDL_Log("Invalid parameter passed to render_text.");
@@ -1682,12 +1913,12 @@ void handle_proj_colls() {
     if (enemy_hp_started) {
 
         snprintf(mon_hp_buff, sizeof(mon_hp_buff), "%d", monsters[curr_mon_on_screen()].HP);
-        render_text(monsters[curr_mon_on_screen()].rect.x, monsters[curr_mon_on_screen()].rect.y, white, mon_hp_buff);
+        render_text(monsters[curr_mon_on_screen()].rect.x, monsters[curr_mon_on_screen()].rect.y, white, mon_hp_buff, font);
         enemy_hp_elapsed = SDL_GetTicks() - enemy_hp_start_time;
     }
     else if(other_enemy_hp_started && monsters[get_other_on_screen()].rect.x >0){//need the and statement or 0 draws in upper left of render present when no other on screen
         snprintf(mon_hp_buff, sizeof(mon_hp_buff), "%d", monsters[get_other_on_screen()].HP);
-        render_text(monsters[get_other_on_screen()].rect.x, monsters[get_other_on_screen()].rect.y, white, mon_hp_buff);
+        render_text(monsters[get_other_on_screen()].rect.x, monsters[get_other_on_screen()].rect.y, white, mon_hp_buff, font);
         enemy_hp_elapsed = SDL_GetTicks() - enemy_hp_start_time;
     }
     if (enemy_hp_elapsed > enemy_hp_delay) {
@@ -1698,7 +1929,7 @@ void handle_proj_colls() {
 
     if (player_hp_started) {
         snprintf(player_hp_buff, sizeof(player_hp_buff), "%d", player_hp);
-        render_text(player_rect.x, player_rect.y - 40, white, player_hp_buff);
+        render_text(player_rect.x, player_rect.y - 40, white, player_hp_buff, font);
         player_hp_elapsed = SDL_GetTicks() - player_hp_start_time;
     }
     if (player_hp_elapsed > player_hp_delay) {
@@ -1916,7 +2147,7 @@ void render_battle_mons(){
             dynamic_battle_array[i].rect.x = render_rects.battle_locs[i].x;
             dynamic_battle_array[i].rect.y = render_rects.battle_locs[i].y;
             render_rect(renderer, dynamic_battle_array[i].rect, red);
-            render_text(dynamic_battle_array[i].rect.x, dynamic_battle_array[i].rect.y, white, dynamic_battle_array[i].name);
+            render_text(dynamic_battle_array[i].rect.x, dynamic_battle_array[i].rect.y, white, dynamic_battle_array[i].name, font);
         }
 
     }
@@ -1926,7 +2157,7 @@ void render_battle_mons(){
             dynamic_battle_array[j].rect.x = render_rects.battle_locs[MAX_MONS+count].x;
             dynamic_battle_array[j].rect.y = render_rects.battle_locs[MAX_MONS+count].y;
             render_rect(renderer, dynamic_battle_array[j].rect, blue);
-            render_text(dynamic_battle_array[j].rect.x, dynamic_battle_array[j].rect.y, white, dynamic_battle_array[j].name);
+            render_text(dynamic_battle_array[j].rect.x, dynamic_battle_array[j].rect.y, white, dynamic_battle_array[j].name, font);
             count++;
         }
     }
@@ -1946,19 +2177,19 @@ void render_bm_bg(){
 }
 //render onto the battle menu rects the main info
 void render_bm_main(){
-    render_text(render_rects.battle_menu[1].x, render_rects.battle_menu[1].y, black, "Fight");
-    render_text(render_rects.battle_menu[2].x, render_rects.battle_menu[2].y, black, "Item");
-    render_text(render_rects.battle_menu[3].x, render_rects.battle_menu[3].y, black, "Run");
+    render_text(render_rects.battle_menu[1].x, render_rects.battle_menu[1].y, black, "Fight", font);
+    render_text(render_rects.battle_menu[2].x, render_rects.battle_menu[2].y, black, "Item", font);
+    render_text(render_rects.battle_menu[3].x, render_rects.battle_menu[3].y, black, "Run", font);
 }
 
 //when  in the state where move menu is selected, render the moves on the battle menu rects, based on an index of which of the two player mons turn it is
 void render_bm_moves(int mon_ind){
     
 
-    render_text(render_rects.battle_menu[1].x, render_rects.battle_menu[1].y, black, player_mons[mon_ind].moves[0].name);
-    render_text(render_rects.battle_menu[2].x, render_rects.battle_menu[2].y, black, player_mons[mon_ind].moves[1].name);
-    render_text(render_rects.battle_menu[3].x, render_rects.battle_menu[3].y, black, player_mons[mon_ind].moves[2].name);
-    render_text(render_rects.battle_menu[4].x, render_rects.battle_menu[4].y, black, player_mons[mon_ind].moves[3].name);
+    render_text(render_rects.battle_menu[1].x, render_rects.battle_menu[1].y, black, player_mons[mon_ind].moves[0].name, font);
+    render_text(render_rects.battle_menu[2].x, render_rects.battle_menu[2].y, black, player_mons[mon_ind].moves[1].name, font);
+    render_text(render_rects.battle_menu[3].x, render_rects.battle_menu[3].y, black, player_mons[mon_ind].moves[2].name, font);
+    render_text(render_rects.battle_menu[4].x, render_rects.battle_menu[4].y, black, player_mons[mon_ind].moves[3].name, font);
 }
 //highlight a low alpha rect over the selkected index which icreases or decreases with A and D/L and R (first always render by default)
 void render_menu_hl(int ind){
@@ -2087,7 +2318,7 @@ int apply_attacks(int i, Monster *target, Monster *attacker){
         battle_hp_started = true;
     }
     else{
-        render_text(target->rect.x, target->rect.y-200, white, battle_hp_buff);
+        render_text(target->rect.x, target->rect.y-200, white, battle_hp_buff, font);
         battle_hp_elapsed = SDL_GetTicks() - battle_hp_start_time;
     }
 
@@ -2215,3 +2446,664 @@ int get_first_enemy_in_dba(){
 }
 
 /*MON BATTLE FUNCTIONS END*/
+
+/*TILE FUNCTIONS*/
+
+void init_under_tiles(){
+    float x_base = 0.0;
+    float y_base = 0.0;
+    int row = 0;
+    int col = 0;
+    int row_mult = 0;
+    for(int i=0;i<ALL_ROWS; i++){
+        for(int j =0; j<ALL_COLS; j++){
+            under_tiles[row_mult+col].rect.x += x_base;
+            under_tiles[row_mult+ col].rect.y += y_base;
+            under_tiles[row_mult+col].row= row;
+            under_tiles[row_mult+ col].col = col;
+            SDL_Log("current under tile x %f", under_tiles[row_mult + col].rect.x);
+            SDL_Log("current under tile y %f", under_tiles[row_mult + col].rect.y);
+            if(j==ALL_COLS-1){
+                row_mult += ALL_COLS;
+                y_base += TILE_HEIGHT;
+                row += 1;
+                SDL_Log("init under row %d", row);
+            }
+            
+            x_base = j== ALL_COLS - 1 ? 0.0 : (x_base + TILE_WIDTH)*1.0;
+            col = col == ALL_COLS - 1 ? 0.0 : (col + 1) *1.0;
+            SDL_Log("init under col %d", col);
+        }
+    }
+
+}
+
+void init_world_areas(){
+    int size=0;
+
+    int col_mult = 0;
+    int row_mult=0;
+    int row_count=0;
+    for(int i=0; i< ALL_AREAS; i++){
+        for(int j=0; j< ALL_ROWS * ALL_COLS; j++){
+            
+            if(under_tiles[j].col == world_areas[i].col && under_tiles[j].row == world_areas[i].row){
+                SDL_Log("under tile col - %d , world tile col - %d", under_tiles[j].col, world_areas[i].col);
+                size = (world_areas[i].area_h * world_areas[i].area_w);
+                
+                world_areas[i].size = size;
+                SDL_Log("size: %d", size);
+                world_areas[i].rects = malloc(size * sizeof(SDL_FRect));//allocate the memory for all of the area tiles
+                if(!world_areas[i].rects){
+                    SDL_Log("malloc failed\n");
+                    return SDL_APP_FAILURE;
+                }
+                for (int k=0, col_count=0; k < size; k++) {
+
+                    world_areas[i].rects[k].x = under_tiles[j].rect.x+col_mult;// set all the rects in the area to the top left, will be set properly in render world areas
+                    world_areas[i].rects[k].y = under_tiles[j].rect.y +row_mult;
+                    world_areas[i].rects[k].w = TILE_WIDTH;
+                    world_areas[i].rects[k].h = TILE_HEIGHT;
+                    world_areas[i].bottom_right = world_areas[i].rects[size - 1];//set the bottom right member
+                    SDL_Log("current rect x %f", world_areas[i].rects[k].x);
+                    SDL_Log("current rect y %f", world_areas[i].rects[k].y);
+                    if(++col_count >= world_areas[i].area_w){
+                        if (++row_count >= world_areas[i].area_h) {
+                            row_mult = 0;
+                            row_count = 0;
+                        }
+                        row_mult += TILE_HEIGHT;
+                        col_mult = 0;
+                        col_count = 0;
+                    }
+                    else{
+                        col_mult += TILE_WIDTH;
+                    }
+
+
+                }
+
+            }
+
+
+        }
+    }
+}
+
+
+
+void render_world_areas(){
+    
+    
+    for(int i=0; i< ALL_AREAS; i++){
+        
+        curr_area_size = world_areas[i].size;
+        //SDL_Log("size: %d", size);
+        for(int j=0; j<curr_area_size; j++){
+            world_areas[i].is_walkable? render_rect(renderer, world_areas[i].rects[j], blue): render_rect(renderer, world_areas[i].rects[j], red);
+            if (!printed) {
+                SDL_Log("rendering world rect x %f", world_areas[i].rects[j].x);
+                SDL_Log("rendering world rect y %f", world_areas[i].rects[j].y);
+                
+
+            }
+        }
+
+    }
+    printed = true;
+
+
+   
+}
+
+
+
+
+//place areas based on their top lefts and widths and heights (CURRENTLY COMMENTED OUT)
+bool place_world_areas(int i, int row, int col) {
+
+    tile_y_offset = world_areas[i].rects[0].y;
+    if(col !=0){
+        world_areas[i].rects[col].x = TILE_WIDTH * col;
+    }
+    if (++col > world_areas[i].area_w) {
+        tile_y_offset += TILE_HEIGHT * row;
+        if (++row > world_areas[i].area_h) {
+            return true;
+        }
+        
+        col = 1;//past top left, back to col x1
+    }
+    world_areas[i].rects[col].y = tile_y_offset;
+    
+
+    return false;
+}
+
+
+
+
+//GRID MAKER FUNCTIONS
+void set_gm_rects(){
+    float x = 0.0;
+    float y = 0.0;
+
+
+    for(int i=0; i<MAX_GM; i++){
+        gm_rects[i].h = GM_HEIGHT;
+        gm_rects[i].w = GM_WIDTH;
+        gm_rects[i].x = x;
+        gm_rects[i].y = y;
+        
+        x += GM_WIDTH+2;
+        if(x>= WINDOW_WIDTH-GM_WIDTH){
+            y += GM_HEIGHT+GM_MARGIN;
+            x = 0;
+
+        }
+        if (y >= WINDOW_HEIGHT - GM_HEIGHT) {
+            break;
+        }
+        
+    }
+}
+void render_gm_rects(){
+
+    if(!gm_buffers_set){
+        int xi = 0;
+        int yi = 0;
+        for (int i = 0; i < MAX_GM; i++) {
+            gm_buffer[i] = malloc(40 * sizeof(char));
+            if (!gm_buffer[i]) {
+                SDL_Log("malloc failed\n");
+                return SDL_APP_FAILURE;
+            }
+            snprintf(gm_buffer[i], 40, "%d,%d", xi, yi);
+
+            if (++xi > 119) {
+                yi++;
+                xi = 0;
+            }
+        }
+        for (int j = 0; j < MAX_GM; j++)
+        {
+            create_gm_texts(gm_rects[j].x, gm_rects[j].y, black, gm_buffer[j], gm_font, j);
+        }
+        gm_buffers_set = true;
+    }
+    
+    
+    for (int i = 0; i < MAX_GM; i++) {
+
+        render_rect(renderer, gm_rects[i], white);
+        SDL_RenderTexture(renderer, gm_textures[i], NULL, &gm_rects[i]);
+
+    }
+}
+void create_gm_texts(float x, float y, SDL_Color color, const char* text, TTF_Font* font, int i ){
+
+    if (!text || !font || !renderer) {
+        SDL_Log("Invalid parameter passed to render_text.");
+        return;
+    }
+
+    SDL_Surface* surface = TTF_RenderText_Solid_Wrapped(font, text, 0, color, (12 * 60)); // 20 60px wide chars
+    if (!surface) {
+        SDL_Log("Unable to create text surface: %s", SDL_GetError()); //muting this warning because it always triggers
+        return;
+    }
+
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (!texture) {
+        SDL_Log("Unable to create texture from surface: %s", SDL_GetError());
+        SDL_DestroySurface(surface);
+        return;
+    }
+
+    // Important: set blendmode to blend
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+    gm_textures[i] = texture;
+
+
+    SDL_DestroySurface(surface);
+    
+    
+}
+
+
+//WORLD MOVEMENT
+void move_world() {
+
+        if (up_pressed) {
+
+                if(++queue_ind<2){
+                    input_queue[queue_ind].direction = 0;
+                    input_queue[queue_ind].timestamp = SDL_GetTicks();
+                }
+     
+                
+        }
+        if (down_pressed) {
+      
+                if (++queue_ind < 2) {
+                    input_queue[queue_ind].direction = 2;
+                    input_queue[queue_ind].timestamp = SDL_GetTicks();
+                }
+
+        }
+        if (right_pressed) {
+      
+                if (++queue_ind < 2) {
+                    input_queue[queue_ind].direction = 1;
+                    input_queue[queue_ind].timestamp = SDL_GetTicks();
+                }
+
+        }
+        if (left_pressed) {
+
+                if (++queue_ind < 2) {
+                    input_queue[queue_ind].direction = 3;
+                    input_queue[queue_ind].timestamp = SDL_GetTicks();
+                }
+
+                
+        }
+
+        if(input_queue[0].timestamp< input_queue[1].timestamp && input_queue[0].direction !=-1){
+            switch(input_queue[0].direction){
+            case 0:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].y += world_velocity;
+                    }
+                }
+                for(int n=0; n<ALL_CHARACTERS; n++){
+                    characters[n].rect.y += world_velocity;
+
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.y += world_velocity;
+                }
+                    
+                    
+                break;
+            }
+            case 1:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].x -= world_velocity;
+                    }
+                }
+                for (int n = 0; n < ALL_CHARACTERS; n++) {
+                    characters[n].rect.x -= world_velocity;
+   
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.x -= world_velocity;
+                }
+                break;
+            }
+            case 2:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].y -= world_velocity;
+                    }
+                }
+                for (int n = 0; n < ALL_CHARACTERS; n++) {
+                    characters[n].rect.y -= world_velocity;
+ 
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.y -= world_velocity;
+                }
+                break;
+            }
+            case 3:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].x += world_velocity;
+                    }
+                }
+                for (int n = 0; n < ALL_CHARACTERS; n++) {
+                    characters[n].rect.x += world_velocity;
+     
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.x += world_velocity;
+                }
+                break;
+            }
+            }
+        }
+        
+        else{
+            switch (input_queue[1].direction) {
+            case 0:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].y += world_velocity;
+                    }
+                }
+                for (int n = 0; n < ALL_CHARACTERS; n++) {
+                    characters[n].rect.y += world_velocity;
+      
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.y += world_velocity;
+                }
+                break;
+            }
+            case 1:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].x -= world_velocity;
+                    }
+                }
+                for (int n = 0; n < ALL_CHARACTERS; n++) {
+                    characters[n].rect.x -= world_velocity;
+    
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.x -= world_velocity;
+                }
+                break;
+            }
+            case 2:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].y -= world_velocity;
+                    }
+                }
+                for (int n = 0; n < ALL_CHARACTERS; n++) {
+                    characters[n].rect.y -= world_velocity;
+ 
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.y -= world_velocity;
+                }
+                break;
+            }
+            case 3:
+            {
+                for (int i = 0; i < ALL_AREAS; i++) {
+                    for (int j = 0; j < world_areas[i].size; j++) {
+                        world_areas[i].rects[j].x += world_velocity;
+                    }
+                }
+                for (int n = 0; n < ALL_CHARACTERS; n++) {
+                    characters[n].rect.x += world_velocity;
+
+                }
+                for (int m = 0; m < MAX_GOAL_ITEMS; m++) {
+                    world_goal_items[m].rect.x += world_velocity;
+                }
+                break;
+            }
+            }
+        }
+
+
+}
+bool input_queue_full(){
+
+    if (input_queue[1].direction != -1){
+
+        SDL_Log("inp queue full");
+        return true;
+
+    }
+    else{
+        return false;
+    }
+    
+}
+
+void reset_inp_queue(){
+    for (int i = 0; i < 2; i++) {
+        input_queue[i].timestamp = NULL;
+        input_queue[i].direction = -1;
+    }
+    queue_ind = -1;
+}
+
+void init_char_dialogues(){
+    //testy tim
+    snprintf(characters[0].dialogues[0].buffer, sizeof(characters[0].dialogues[0].buffer), "Hey, hows it goin?");
+    snprintf(characters[0].dialogues[1].buffer, sizeof(characters[0].dialogues[1].buffer), "Get me that gold and I will give you the key to unlock that area");
+    snprintf(characters[0].dialogues[2].buffer, sizeof(characters[0].dialogues[2].buffer), "Ok good, here's the key");
+}
+
+void init_character_locs(){
+    for(int i=0; i< ALL_ROWS * ALL_COLS; i++){
+
+            for(int j=0; j<ALL_CHARACTERS; j++){
+                if(under_tiles[i].col == characters[j].lcol && under_tiles[i].row == characters[j].lrow && (characters[j].lrow !=0 && characters[j].lcol !=0)){
+                    characters[j].rect.x = under_tiles[i].rect.x;
+                    characters[j].rect.y = under_tiles[i].rect.y;
+                    SDL_Log("character %d x = %f y= %f", j, characters[j].rect.x, characters[j].rect.y);
+                }
+            }
+
+    }
+}
+
+void init_key_items(){
+    snprintf(characters[0].goal_items[0].name,sizeof(characters[0].goal_items[0].name),  "test key");
+    snprintf(characters[0].reward_items[0].name, sizeof(characters[0].reward_items[0].name), "test reward");
+    characters[0].goal_items[0].location.row =10;
+    characters[0].goal_items[0].location.col = 10;
+    characters[0].dialogue_stops[0].stop_ind = 1;
+    characters[0].goal_items[0].ds = 1;
+    world_areas[14].key = characters[0].reward_items[0];
+    
+
+    
+        
+
+    for (int j =0; j<ALL_ROWS*ALL_COLS; j++){
+        for (int i = 0; i < ALL_CHARACTERS; i++) {
+            for (int k = 0; k < MAX_GOAL_ITEMS; k++) {
+            if(characters[i].goal_items[k].location.row == under_tiles[j].row && characters[i].goal_items[k].location.col == under_tiles[j].col){
+                world_goal_items[k] = characters[i].goal_items[k];
+                world_goal_items[k].ds = characters[i].goal_items[k].ds;
+                world_goal_items[k].rect.x = under_tiles[j].rect.x;
+                world_goal_items[k].rect.y = under_tiles[j].rect.y;
+                world_goal_items[k].rect.w = ITEM_WIDTH;
+                world_goal_items[k].rect.h = ITEM_HEIGHT;
+                SDL_Log("goal item placed at x =%f , y=%f ", world_goal_items[k].rect.x, world_goal_items[k].rect.y);
+                }
+            }
+        }
+    }
+}
+
+
+void render_characters(){
+    for(int i=0; i<ALL_CHARACTERS; i++){
+
+        if((abs(characters[i].rect.x - world_player.rect.x) < WINDOW_WIDTH) && (abs(characters[i].rect.y - world_player.rect.y) < WINDOW_HEIGHT) && (characters[i].lrow !=0 && characters[i].lcol !=0)){
+
+            render_rect(renderer, characters[i].rect, red);
+            //SDL_Log("Rendering %s", characters[i].name);
+        }
+    }
+}
+
+//returns index of which character
+int handle_character_interact(){
+
+    for (int i=0;  i < ALL_CHARACTERS; i++) {
+        if((abs(world_player.rect.x - characters[i].rect.x) < TILE_WIDTH) && (abs(world_player.rect.y - characters[i].rect.y) < TILE_HEIGHT*2)){
+            if(!supress_interact){
+                if(space_pressed){
+                    SDL_Log("entering dialogue");
+                    entered_dia = true;
+                    interact_char_ind = i;
+                    supress_interact = true;
+                }
+            }
+        }
+        if (!(abs(world_player.rect.x - characters[interact_char_ind].rect.x) < TILE_WIDTH) && !(abs(world_player.rect.y - characters[interact_char_ind].rect.y) < TILE_HEIGHT * 2)){
+            entered_dia = false;
+            supress_interact = false;
+        }
+        
+    }
+
+    
+}
+//takes the characters index returned from handle_character_interact as a param
+void progress_character_dia(){
+    
+    if(entered_dia){
+        SDL_Log("Dia ind- %d", dia_ind);
+        render_text(characters[interact_char_ind].rect.x, characters[interact_char_ind].rect.y, white, characters[interact_char_ind].dialogues[dia_ind].buffer, font);
+
+        int ds_ind = characters[interact_char_ind].ds_ind;
+                
+        if(shift_pressed){
+            if(dia_ind != characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind && characters[interact_char_ind].dialogue_stops[ds_ind].passed!=true){
+                dia_ind++;
+                foo++;
+            }
+            else if(dia_ind== characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind && characters[interact_char_ind].dialogue_stops[ds_ind].passed != true){
+                for(int k =0; k< MAX_GOAL_ITEMS; k++){
+
+                        if(world_player.key_items[k].ds == characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind ){
+
+                            characters[interact_char_ind].dialogue_stops[ds_ind].passed = true;
+                            
+                            
+                            int x = get_next_empty_keyitem();
+                            dia_ind++;
+                            world_player.key_items[x] = characters[interact_char_ind].reward_items[ds_ind];
+                            world_player.key_items[x].obtained = true;
+                            if(characters[interact_char_ind].dialogue_stops[ds_ind+1].stop_ind!=0){
+                                characters[interact_char_ind].ds_ind += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        
+
+    
+    
+}
+
+void handle_key_item_pickup(){
+
+    for (int i = 0; i < ALL_KEYITEMS; i++) {
+        
+        
+        if ((abs(world_player.rect.x - world_goal_items[i].rect.x) < PICKUP_RADIUS) && (abs(world_player.rect.y - world_goal_items[i].rect.y) < PICKUP_RADIUS)){
+
+            if (!world_goal_items[i].obtained) {
+                int x = get_next_empty_keyitem();
+
+                world_player.key_items[x] = world_goal_items[i];
+                SDL_Log("item obtained");
+                world_player.key_items[x].obtained = true;
+                world_goal_items[i].obtained = true;
+
+            }
+        }
+
+    }
+
+
+    
+}
+//find the next free slot in the players key items
+int get_next_empty_keyitem(){
+    for(int i=0; i<ALL_KEYITEMS; i++){
+        if(!world_player.key_items[i].obtained){
+            return i;
+        }
+
+        
+    }
+    return -1;
+
+
+
+}
+void render_key_items(){
+
+    for (int k = 0; k < ALL_KEYITEMS; k++) {
+        if ((abs(world_goal_items[k].rect.x - world_player.rect.x) < WINDOW_WIDTH) && (abs(world_goal_items[k].rect.y - world_player.rect.y) < WINDOW_HEIGHT) && (world_goal_items[k].location.row !=0 && world_goal_items[k].location.col != 0)){
+            render_rect(renderer, world_goal_items[k].rect, red);
+            //SDL_Log("Rendering item");
+        }
+    }
+    
+}
+
+void collisions_world(){
+    for(int i =0; i<ALL_AREAS; i++){
+        if(!world_areas[i].is_walkable){
+
+            if(((world_player.rect.y + TILE_HEIGHT)< world_areas[i].bottom_right.y) && ((world_player.rect.x + TILE_WIDTH/2) < world_areas[i].bottom_right.x) && ((world_player.rect.x + TILE_WIDTH / 2)  > world_areas[i].rects[0].x && (world_player.rect.y + TILE_HEIGHT) > world_areas[i].rects[0].y)) {
+
+                for (int k = 0; k < world_areas[i].size; k++) {
+                    if(abs(world_areas[i].rects[k].x - (world_player.rect.x+TILE_WIDTH)) < TILE_WIDTH && abs(world_areas[i].rects[k].y - (world_player.rect.y+TILE_HEIGHT)) < TILE_HEIGHT){
+                        world_player_coll = true;
+                    }
+
+                }
+                    
+                
+ 
+                  
+            }
+        }
+
+    }
+    if (world_player_coll){
+        if (!world_vel_inverted) {
+            world_velocity *= -1;
+            SDL_Log("velocity inverted");
+            vel_inv_start = SDL_GetTicks();
+            vel_inv_elapsed = 0;
+            world_vel_inverted = true;
+        }
+        vel_inv_elapsed = SDL_GetTicks() - vel_inv_start;
+        if (vel_inv_elapsed > vel_inv_delay) {
+            world_velocity = 5.0;
+            SDL_Log("velocity un-inverted");
+            world_player_coll = false;
+            world_vel_inverted = false;
+
+        }
+    }
+    
+}
+
+void unlock_areas() {
+    for (int i = 0; i < ALL_AREAS; i++) {
+
+        if(world_areas[i].is_unlockable){
+
+            if(abs((world_player.rect.x+TILE_WIDTH) - (world_areas[i].rects[0].x + TILE_WIDTH * world_areas[i].area_w)) < (TILE_WIDTH*2) && abs((world_player.rect.y+world_player.rect.h) - (world_areas[i].rects[0].y + TILE_HEIGHT * world_areas[i].area_h))< TILE_HEIGHT*2)  {
+
+                for(int j =0; j< ALL_KEYITEMS; j++){
+                    if(strcmp(world_areas[i].key.name,world_player.key_items[j].name) ==0){
+                        if(space_pressed){
+                            world_areas[i].is_walkable = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
