@@ -33,13 +33,13 @@
 #define TRACK_WIDTH_MOD 40
 #define TILE_WIDTH 100
 #define TILE_HEIGHT 100
-#define AREA_TILE_LIM 9216
-#define ALL_ROWS 67
-#define ALL_COLS 120
+#define AREA_TILE_LIM 32160//important that it is ALL_ROWS * ALL_COLS or else buffer overflow
+#define ALL_ROWS 134
+#define ALL_COLS 240
 #define ALL_AREAS 20
 #define GM_HEIGHT 30.0
 #define GM_WIDTH 30.0
-#define MAX_GM 9216
+#define MAX_GM 32160
 #define GM_MARGIN 2
 #define ALL_KEYITEMS 100
 #define ALL_CHARACTERS 15
@@ -476,9 +476,12 @@ char* gm_buffer[MAX_GM];
 bool gm_buffers_set;
 SDL_Texture* gm_textures[MAX_GM];
 void create_gm_texts(float x, float y, SDL_Color color, const char* text, TTF_Font* font, int i);
-
-
-
+bool gm_loaded;
+int gm_map_w = ALL_COLS * GM_WIDTH + (ALL_COLS * GM_MARGIN);
+int gm_map_h = ALL_ROWS * GM_HEIGHT + (ALL_ROWS * GM_MARGIN);
+SDL_Texture* gm_target;
+int output_gm_bmp(void);
+bool bmp_output;
 //World characters
 
 typedef struct {
@@ -536,6 +539,7 @@ Uint32 vel_inv_elapsed;
 Uint32 vel_inv_delay=100;
 bool world_player_coll;
 void unlock_areas();
+
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -599,6 +603,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
 
     srand((unsigned)time(NULL)); // seed
+    gm_target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gm_map_w, gm_map_h);
     return SDL_APP_CONTINUE;
 }
 
@@ -1099,9 +1104,17 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     {
         if(!gm_rects_set){
             set_gm_rects();
+            gm_rects_set = true;
+        }
+
+        render_gm_rects();
+        if (!bmp_output && gm_rects_set) {
+            output_gm_bmp();
+            bmp_output = true;
 
         }
-        render_gm_rects();
+
+
     }
 
     }
@@ -2595,13 +2608,13 @@ void set_gm_rects(){
         gm_rects[i].x = x;
         gm_rects[i].y = y;
         
-        x += GM_WIDTH+2;
-        if(x>= WINDOW_WIDTH-GM_WIDTH){
+        x += GM_WIDTH+GM_MARGIN;
+        if(x>= GM_WIDTH * ALL_COLS + (ALL_COLS * GM_MARGIN)){
             y += GM_HEIGHT+GM_MARGIN;
             x = 0;
 
         }
-        if (y >= WINDOW_HEIGHT - GM_HEIGHT) {
+        if (y >= ALL_ROWS * GM_HEIGHT + (GM_MARGIN * ALL_ROWS)) {
             break;
         }
         
@@ -2620,7 +2633,7 @@ void render_gm_rects(){
             }
             snprintf(gm_buffer[i], 40, "%d,%d", xi, yi);
 
-            if (++xi > 119) {
+            if (++xi > ALL_COLS-1) {
                 yi++;
                 xi = 0;
             }
@@ -2639,6 +2652,9 @@ void render_gm_rects(){
         SDL_RenderTexture(renderer, gm_textures[i], NULL, &gm_rects[i]);
 
     }
+    gm_loaded = true;
+
+
 }
 void create_gm_texts(float x, float y, SDL_Color color, const char* text, TTF_Font* font, int i ){
 
@@ -2669,6 +2685,43 @@ void create_gm_texts(float x, float y, SDL_Color color, const char* text, TTF_Fo
     SDL_DestroySurface(surface);
     
     
+}
+int output_gm_bmp(void) {
+    // Render map into target
+    if (SDL_SetRenderTarget(renderer, gm_target) != true) {
+        SDL_Log("SDL_SetRenderTarget failed: %s", SDL_GetError());
+        return 1;
+    }
+
+
+    // Draw everything into the target (same rendering code you use on screen)
+    for (int i = 0; i < MAX_GM; i++) {
+        render_rect(renderer, gm_rects[i], white);
+        SDL_RenderTexture(renderer, gm_textures[i], NULL, &gm_rects[i]);
+    }
+
+    // --- IMPORTANT ---
+    // Read pixels WHILE target is still bound
+    SDL_Surface* surface = SDL_RenderReadPixels(renderer, NULL);
+    if (!surface) {
+        SDL_Log("SDL_RenderReadPixels failed: %s", SDL_GetError());
+        SDL_SetRenderTarget(renderer, NULL);
+        return 1;
+    }
+
+    // Save BMP
+    if (SDL_SaveBMP(surface, "map_output.bmp") != 0) {
+        SDL_Log("SDL_SaveBMP failed: %s", SDL_GetError());
+    }
+
+    SDL_DestroySurface(surface);
+
+    // Restore default target BEFORE present
+    SDL_SetRenderTarget(renderer, NULL);
+
+    SDL_Log("Exported map_output.bmp successfully!");
+
+    return 0;
 }
 
 
@@ -3090,20 +3143,29 @@ void collisions_world(){
 }
 
 void unlock_areas() {
+
     for (int i = 0; i < ALL_AREAS; i++) {
 
-        if(world_areas[i].is_unlockable){
+      
 
-            if(abs((world_player.rect.x+TILE_WIDTH) - (world_areas[i].rects[0].x + TILE_WIDTH * world_areas[i].area_w)) < (TILE_WIDTH*2) && abs((world_player.rect.y+world_player.rect.h) - (world_areas[i].rects[0].y + TILE_HEIGHT * world_areas[i].area_h))< TILE_HEIGHT*2)  {
-
-                for(int j =0; j< ALL_KEYITEMS; j++){
-                    if(strcmp(world_areas[i].key.name,world_player.key_items[j].name) ==0){
-                        if(space_pressed){
+        for (int k = 0; k < world_areas[i].size; k++) {
+            if (abs(world_areas[i].rects[k].x - (world_player.rect.x+TILE_WIDTH/2)) < TILE_WIDTH && abs(world_areas[i].rects[k].y - (world_player.rect.y + TILE_HEIGHT)) < TILE_HEIGHT *8) {
+                for (int j = 0; j < ALL_KEYITEMS; j++) {
+                    if (strcmp(world_areas[i].key.name, world_player.key_items[j].name) == 0) {
+                        if (space_pressed) {
                             world_areas[i].is_walkable = true;
                         }
                     }
                 }
             }
+
         }
+
+
+
+
+
+ 
+
     }
 }
