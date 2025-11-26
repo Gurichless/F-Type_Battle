@@ -46,7 +46,11 @@
 #define MAX_GOAL_ITEMS 3
 #define MAX_DIAS 20
 #define PICKUP_RADIUS 30
-
+#define SPRITESHEET_FRAME_COLS 8 //8 frames per animation
+#define SPRITESHEET_FRAME_ROWS 5 //4 directions, 5 different animations, plus idle animation (can change these if needed for other spritesheets)
+#define SPRITE_WIDTH 100
+#define SPRITE_HEIGHT 100
+#define SPRITESHEET_MARGIN 2 
 static SDL_Color white = { 255, 255, 255, 255 };
 static SDL_Color red = { 255, 0, 0, 255 };
 static SDL_Color blue = { 0, 0, 255, 255 };
@@ -256,6 +260,10 @@ Uint32 proj_coll_start_en;
 Uint32 proj_coll_elapsed_en;
 bool proj_coll_started_en;
 
+Uint32 saw_period = 30;
+Uint32 saw_start_time;
+Uint32 saw_elapsed;
+int saw_sign = -1;
 
 
 //GAME STATE ENUM
@@ -264,6 +272,7 @@ typedef enum {
     GAMESTATE_BATTLE_START,
     GAMESTATE_WORLD,
     GAMESTATE_GRIDMAKER,
+    GAMESTATE_SPRITESHEET
 
 
 }GameState;
@@ -411,6 +420,7 @@ typedef struct {
     size_t size;//need this to be able to iterate conditionally on size for rendering
     SDL_FRect bottom_right;//the bottom rightmost rect for easier bounds checking
     bool is_unlockable;
+    int map_index; //an int 0-5. 0 for center map, which means no offset, 1 for the north map, which means -y offset, 2 for east +x offset, 3 for south + y offset, 4 for west -x offset. 5 for interiors drawn a double length away off screen, offset is map_w and map_h
     KeyItem key;
     //TODO texture
 } World_Area;
@@ -466,7 +476,7 @@ int queue_ind=-1;
 
 void reset_inp_queue();
 
-//grid maker
+//GRID MAKER
 
 SDL_FRect gm_rects[MAX_GM];
 void render_gm_rects();
@@ -482,7 +492,8 @@ int gm_map_h = ALL_ROWS * GM_HEIGHT + (ALL_ROWS * GM_MARGIN);
 SDL_Texture* gm_target;
 int output_gm_bmp(void);
 bool bmp_output;
-//World characters
+
+//WORLD CHARACTERS
 
 typedef struct {
     char buffer[80];
@@ -512,7 +523,7 @@ typedef struct {
     KeyItem key_items[ALL_KEYITEMS];
 }WorldPlayer;
 
-WorldPlayer world_player = { .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = (WINDOW_WIDTH / 2) - (TILE_WIDTH / 2), .y = (WINDOW_HEIGHT / 2) - (TILE_HEIGHT / 2) }, .lrow = 1,.lcol = 1 };//will decide inital starting point and other location force changes with lrow and lcol
+WorldPlayer world_player = { .rect = {.h = TILE_HEIGHT ,.w = TILE_WIDTH, .x = (WINDOW_WIDTH / 2) - (TILE_WIDTH / 2), .y = (WINDOW_HEIGHT / 2) - (TILE_HEIGHT / 2) }, .lrow = 1,.lcol = 1 };//will decide inital starting point and other location force changes with lrow and lcol
 
 Character characters [ALL_CHARACTERS] = {
     {.name ="testy_tim", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 32, 86}
@@ -539,6 +550,40 @@ Uint32 vel_inv_elapsed;
 Uint32 vel_inv_delay=100;
 bool world_player_coll;
 void unlock_areas();
+
+//SPRITESHEETS / ANIMATION
+int spritesheet_size = SPRITESHEET_FRAME_ROWS * SPRITESHEET_FRAME_COLS;
+SDL_FRect spritesheet_rects[SPRITESHEET_FRAME_ROWS * SPRITESHEET_FRAME_COLS];
+void set_spritesheet_rects();
+bool spritesheet_set;
+void render_spritesheet();
+SDL_Texture* spritesheet_target;
+int spritesheet_w = SPRITESHEET_FRAME_COLS * SPRITE_WIDTH;
+int spritesheet_h = SPRITESHEET_FRAME_ROWS * SPRITE_HEIGHT;
+int output_spritesheet_bmp(void);
+bool spritesheet_bmp_output;
+SDL_FRect walking_src;
+SDL_FRect walking_dst;
+int walk_curr_frame=0;
+Uint32 walk_last_time;
+Uint32 walk_frame_delay = 100;
+int walk_total_frames = SPRITESHEET_FRAME_COLS;
+void render_animation(
+    int total_frames,
+    int* current_frame,
+    Uint32* last_time,
+    Uint32* now,
+    Uint32 frame_delay,
+    int x, int y,
+    SDL_Texture* texture,
+    SDL_Renderer* renderer,
+    SDL_FRect src,
+    SDL_FRect dst);
+SDL_FRect create_dst(int frame_width, int frame_height, int current_frame, int x, int y);
+SDL_FRect create_src(int frame_width, int frame_height, int current_frame, int x, int y);
+int walk_surface_w = 0;
+int walk_surface_h = 0;
+SDL_Texture* walk_texture = NULL;
 
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
@@ -598,12 +643,33 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     player_rect.x = 100.0, player_rect.y = WINDOW_HEIGHT / 2, player_rect.w = PLAYER_WIDTH, player_rect.h = PLAYER_HEIGHT;
     ship_mon_left.x = 100.0, ship_mon_left.y = WINDOW_HEIGHT / 2 - PLAYER_HEIGHT - 20, ship_mon_left.w = PLAYER_WIDTH, ship_mon_left.h = PLAYER_HEIGHT;
     ship_mon_right.x = 100.0, ship_mon_right.y = WINDOW_HEIGHT / 2 + PLAYER_HEIGHT + 20, ship_mon_right.w = PLAYER_WIDTH, ship_mon_right.h = PLAYER_HEIGHT;
-    snprintf(player_proj.type,sizeof(player_proj.type), "sine");
+    snprintf(player_proj.type,sizeof(player_proj.type), "saw");
     snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
     snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
 
     srand((unsigned)time(NULL)); // seed
     gm_target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gm_map_w, gm_map_h);
+    spritesheet_target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, spritesheet_w, spritesheet_h);
+    
+
+
+    SDL_Surface* walk_surface = NULL;
+    walk_surface = SDL_LoadBMP("./textures/spritesheet_testing.bmp");
+    if (!walk_surface) {
+        SDL_Log("Couldn't load bitmap: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    walk_surface_w = walk_surface->w;
+    walk_surface_h = walk_surface->h;
+
+    walk_texture = SDL_CreateTextureFromSurface(renderer, walk_surface);
+    if (!walk_surface) {
+        SDL_Log("Couldn't create static texture: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    SDL_DestroySurface(walk_surface);
+
     return SDL_APP_CONTINUE;
 }
 
@@ -696,6 +762,11 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
     now = SDL_GetTicks();
     frame_start = SDL_GetTicks();
+
+    //create animation sources and destinations at the start/top of each loop cycle
+    walking_src = create_src(SPRITE_WIDTH, SPRITE_HEIGHT, walk_curr_frame, world_player.rect.x, world_player.rect.y);
+    walking_dst = create_dst(SPRITE_WIDTH, SPRITE_HEIGHT, walk_curr_frame, world_player.rect.x, world_player.rect.y);
+
     //GAMESTATE SWITCH START
     switch (game_state) {
 
@@ -1008,7 +1079,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
             {
 
-                //TODO set enemy's decisions based on RNG
+                // set enemy's decisions based on RNG
                 if (!enemy_decisions_set) {
                     for (int m = 0; m < dynamic_size; m++) {
                         if (!dynamic_battle_array[m].is_in_party) {
@@ -1017,7 +1088,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
                     }
                     enemy_decisions_set = true;
                 }
-                //TODO apply the effects of the attacks within the dynamic battle array based on the indices gathered above
+                //apply the effects of the attacks within the dynamic battle array based on the indices gathered above
                 if (!attacks_applied) {
 
                     //apply attacks 1 by 1 through the now ordered battle array
@@ -1095,6 +1166,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         
         handle_key_item_pickup();
         move_world();
+       
+        render_animation(walk_total_frames, &walk_curr_frame, &walk_last_time, &now, walk_frame_delay, world_player.rect.x, world_player.rect.y, walk_texture, renderer, walking_src, walking_dst);
         collisions_world();
         unlock_areas();
         
@@ -1115,6 +1188,19 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         }
 
 
+    }
+    case GAMESTATE_SPRITESHEET:
+    {
+        if(!spritesheet_set){
+
+            set_spritesheet_rects();
+            spritesheet_set = true;
+        }
+        render_spritesheet();
+        if(!spritesheet_bmp_output && spritesheet_set){
+            output_spritesheet_bmp();
+            spritesheet_bmp_output = true;
+        }
     }
 
     }
@@ -1801,9 +1887,14 @@ void accel_player_proj() {
         }
         else {
             if (mouse_in_valid_zone) {
-                //check for proj type here
+                //check for proj type here TODO MORE PROJECTILE TYPES AND STRCMP CONDITION CHECKS HERE
                 if(strcmp(player_proj.type , "sine") ==0){
                     player_proj.rects.y += sin(sqrt(player_proj.rects.x)) * track_velocity;
+                }
+                else if(strcmp(player_proj.type, "saw")==0){
+
+                    player_proj.rects.y  = saw_sign == -1? player_proj.rects.y - track_velocity  : player_proj.rects.y + track_velocity ;
+   
                 }
                 //mouse above
                 if (mouse_y < player_rect.y) {
@@ -1835,7 +1926,8 @@ void accel_player_proj() {
         if (player_proj_elapsed > PLAYER_PROJ_DELAY) {
             player_loaded = false;
             player_proj_start_time = SDL_GetTicks();
-
+            //the shot frequency ends each period here, variables can be reset or changed
+            saw_sign *= -1;
             player_proj_started = false;
             player_proj_elapsed = 0;
         }
@@ -2609,12 +2701,12 @@ void set_gm_rects(){
         gm_rects[i].y = y;
         
         x += GM_WIDTH+GM_MARGIN;
-        if(x>= GM_WIDTH * ALL_COLS + (ALL_COLS * GM_MARGIN)){
+        if(x>= gm_map_w){
             y += GM_HEIGHT+GM_MARGIN;
             x = 0;
 
         }
-        if (y >= ALL_ROWS * GM_HEIGHT + (GM_MARGIN * ALL_ROWS)) {
+        if (y >= gm_map_h) {
             break;
         }
         
@@ -2762,11 +2854,18 @@ void move_world() {
 
                 
         }
-
+        else{
+            //IDLE ANIM
+            walking_src.y = SPRITE_HEIGHT * 4;
+        }
+        
         if(input_queue[0].timestamp< input_queue[1].timestamp && input_queue[0].direction !=-1){
+            
             switch(input_queue[0].direction){
             case 0:
             {
+                walking_src.y = 0;
+                
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].y += world_velocity;
@@ -2784,7 +2883,10 @@ void move_world() {
                 break;
             }
             case 1:
-            {
+            {   //change to second row of sprite sheet
+                walking_src.y = SPRITE_HEIGHT;
+                
+
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].x -= world_velocity;
@@ -2801,6 +2903,9 @@ void move_world() {
             }
             case 2:
             {
+                walking_src.y = SPRITE_HEIGHT*2;
+                
+
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].y -= world_velocity;
@@ -2817,6 +2922,8 @@ void move_world() {
             }
             case 3:
             {
+                walking_src.y = SPRITE_HEIGHT * 3;
+                
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].x += world_velocity;
@@ -2838,6 +2945,9 @@ void move_world() {
             switch (input_queue[1].direction) {
             case 0:
             {
+                walking_src.y = 0;
+                
+                
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].y += world_velocity;
@@ -2854,6 +2964,8 @@ void move_world() {
             }
             case 1:
             {
+                walking_src.y = SPRITE_HEIGHT ;
+                
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].x -= world_velocity;
@@ -2870,6 +2982,8 @@ void move_world() {
             }
             case 2:
             {
+                walking_src.y = SPRITE_HEIGHT*2;
+                
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].y -= world_velocity;
@@ -2886,6 +3000,8 @@ void move_world() {
             }
             case 3:
             {
+                walking_src.y = SPRITE_HEIGHT *3;
+                
                 for (int i = 0; i < ALL_AREAS; i++) {
                     for (int j = 0; j < world_areas[i].size; j++) {
                         world_areas[i].rects[j].x += world_velocity;
@@ -3161,11 +3277,110 @@ void unlock_areas() {
 
         }
 
+    }
+}
+
+void set_spritesheet_rects(){
+    int x = 0;
+    int y = 0;
+    for(int i =0; i< spritesheet_size; i++){
+        spritesheet_rects[i].w = SPRITE_WIDTH;
+        spritesheet_rects[i].h = SPRITE_HEIGHT;
+        spritesheet_rects[i].x = x;
+        spritesheet_rects[i].y = y;
+        if (x + SPRITE_WIDTH + SPRITESHEET_MARGIN > (SPRITESHEET_FRAME_COLS * SPRITE_WIDTH)+ SPRITESHEET_MARGIN){
+            y += SPRITE_HEIGHT + SPRITESHEET_MARGIN;
+            x = 0;
+        }
+        else{
+            x += SPRITE_WIDTH + SPRITESHEET_MARGIN;
+        }
+
+    }
+}
+
+void render_spritesheet(){
+    for (int i = 0; i < spritesheet_size; i++){
+        render_rect(renderer, spritesheet_rects[i], white);
+    }
+}
+int output_spritesheet_bmp(void) {
+    // Render map into target
+    if (SDL_SetRenderTarget(renderer, spritesheet_target) != true) {
+        SDL_Log("SDL_SetRenderTarget failed: %s", SDL_GetError());
+        return 1;
+    }
 
 
+    // Draw everything into the target (same rendering code you use on screen)
+    for (int i = 0; i < spritesheet_size; i++) {
+        render_rect(renderer, spritesheet_rects[i], white);
 
+    }
 
- 
+    // --- IMPORTANT ---
+    // Read pixels WHILE target is still bound
+    SDL_Surface* surface = SDL_RenderReadPixels(renderer, NULL);
+    if (!surface) {
+        SDL_Log("SDL_RenderReadPixels failed: %s", SDL_GetError());
+        SDL_SetRenderTarget(renderer, NULL);
+        return 1;
+    }
 
+    // Save BMP
+    if (SDL_SaveBMP(surface, "spritesheet_output.bmp") != 0) {
+        SDL_Log("SDL_SaveBMP failed: %s", SDL_GetError());
+    }
+
+    SDL_DestroySurface(surface);
+
+    // Restore default target BEFORE present
+    SDL_SetRenderTarget(renderer, NULL);
+
+    SDL_Log("Exported spritesheet_output.bmp successfully!");
+
+    return 0;
+}
+
+SDL_FRect create_src(int frame_width, int frame_height, int current_frame, int x, int y) {
+    SDL_FRect src = {
+       .x = current_frame * frame_width,
+       .y = 0,   //y can be changed to multiples of height depending on input, to get at different rows of sheet
+       .w = frame_width,
+       .h = frame_height
+    };
+
+    return src;
+
+}
+SDL_FRect create_dst(int frame_width, int frame_height, int current_frame, int x, int y) {
+
+    SDL_FRect dst = {
+    .x = x,
+    .y = y,
+    .w = frame_width,
+    .h = frame_height
+    };
+
+    return dst;
+
+}
+void render_animation(
+    int total_frames,
+    int* current_frame,
+    Uint32* last_time,
+    Uint32* now,
+    Uint32 frame_delay,
+    int x, int y,
+    SDL_Texture* texture,
+    SDL_Renderer* renderer,
+    SDL_FRect src,
+    SDL_FRect dst) {
+    SDL_RenderTexture(renderer, texture, &src, &dst);
+
+    if (*now - *last_time >= frame_delay) {
+        SDL_Log("next frame %d", *current_frame + 1);
+        *current_frame = (*current_frame + 1) % total_frames;
+        *last_time = SDL_GetTicks();
     }
 }
