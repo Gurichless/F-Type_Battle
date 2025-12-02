@@ -45,12 +45,14 @@
 #define ALL_CHARACTERS 15
 #define MAX_GOAL_ITEMS 3
 #define MAX_DIAS 20
-#define PICKUP_RADIUS 30
+#define PICKUP_RADIUS 60
 #define SPRITESHEET_FRAME_COLS 8 //8 frames per animation
 #define SPRITESHEET_FRAME_ROWS 5 //4 directions, 5 different animations, plus idle animation (can change these if needed for other spritesheets)
 #define SPRITE_WIDTH 100
 #define SPRITE_HEIGHT 100
 #define SPRITESHEET_MARGIN 2 
+#define WORLD_VELOCITY_DEBUG 20.0
+#define WORLD_VELOCITY 5.0
 static SDL_Color white = { 255, 255, 255, 255 };
 static SDL_Color red = { 255, 0, 0, 255 };
 static SDL_Color blue = { 0, 0, 255, 255 };
@@ -155,7 +157,7 @@ Uint32 repel_delay=20;
 void handle_colls();
 void accelerate();
 
-float world_velocity = 20.0;//DEBUG change back to 5.0
+float world_velocity = WORLD_VELOCITY_DEBUG;//DEBUG change back to 5.0
 //ITEMS STRUCT
 typedef struct {
     SDL_FRect items[MAX_ITEMS];
@@ -196,6 +198,7 @@ typedef struct {
     bool is_in_party; //so not to have to work in player mon_array vs battle array
     SDL_FRect rect;
     Move moves[MAX_MOVES];
+    char proj_type[40];//to load top and bottom_proj based on mons
 
 }Monster;
 Move moves[MAX_MOVES];
@@ -204,12 +207,12 @@ void render_text(float x, float y, SDL_Color color, const char* text, TTF_Font* 
 
 //MON DATA
 Monster monsters[MAX_MONS] = {
-    {.name = "test0", .type = "type0", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 101, .wk ="A", .res ="B", .encountered = false,.turn= 1, .att_ind = NULL, .mov_ind= NULL,.is_in_party=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name ="mov", .power=10, .type= "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
-    {.name = "test1", .type = "type1", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 104,.wk = "A", .res = "B", .encountered = false, .turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
-    {.name = "test2", .type = "type2", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 109,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
-    {.name = "test3", .type = "type3", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 103,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL, .is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
-    {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 106,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL, .mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
-    {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 102,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}},
+    {.name = "test0", .type = "type0", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 101, .wk ="A", .res ="B", .encountered = false,.turn= 1, .att_ind = NULL, .mov_ind= NULL,.is_in_party=false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name ="mov", .power=10, .type= "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test1", .type = "type1", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 104,.wk = "A", .res = "B", .encountered = false, .turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "sine"},
+    {.name = "test2", .type = "type2", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 109,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test3", .type = "type3", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 103,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL, .is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 106,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL, .mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 102,.wk = "A",.res = "B",.encountered = false,.turn= 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
 };
 Monster battle_array[MAX_MONS+2];//with player mons added
 Monster player_mons[2];
@@ -395,7 +398,11 @@ int opt_mult = 10;//for speed optimization
 
 //TILES
 
-
+typedef struct {
+    int stop_ind;
+    bool passed;
+    char id[40]; //identifying 4 digit string
+}DialogueStop;//a dialogue stop ind perhaps should never be 0, so we can check that condition, and decide if one exists at the next index in the ds array
 typedef struct {
     int row;
     int col;
@@ -406,6 +413,7 @@ typedef struct {
     SDL_FRect rect;
     KeyItemLoc location;
     int ds;//index for which dialogue this passes
+    DialogueStop dialogue_stop;//for id check
 }KeyItem;
 
 typedef struct {
@@ -448,7 +456,8 @@ World_Area world_areas[ALL_AREAS]={
     {NULL, "Indust Ground 8", 61, 71, true, 2,5,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
     {NULL, "Indust Ground 9", 61, 78, true, 2,5,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
     {NULL, "Indust Ground 7", 61, 87, true, 4,3,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, false},
-    {NULL, "Blocked Area 0",  22, 23, false, 4, 8, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, true},
+    {NULL, "Blocked Area 0",  22, 23, false, 4, 8,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, true},
+    {NULL, "Blocked Area 1",  33, 33, false, 4, 8,0, .bottom_right = {.w = 0, .h = 0, .x = 0, .y = 0}, true},
 
 };
 Under_Tile under_tiles[AREA_TILE_LIM];
@@ -499,10 +508,7 @@ typedef struct {
     char buffer[80];
 }Dialogue;
 
-typedef struct {
-    int stop_ind;
-    bool passed;
-}DialogueStop;//a dialogue stop ind perhaps should never be 0, so we can check that condition, and decide if one exists at the next index in the ds array
+
 
 typedef struct {
     char name[40];
@@ -526,7 +532,9 @@ typedef struct {
 WorldPlayer world_player = { .rect = {.h = TILE_HEIGHT ,.w = TILE_WIDTH, .x = (WINDOW_WIDTH / 2) - (TILE_WIDTH / 2), .y = (WINDOW_HEIGHT / 2) - (TILE_HEIGHT / 2) }, .lrow = 1,.lcol = 1 };//will decide inital starting point and other location force changes with lrow and lcol
 
 Character characters [ALL_CHARACTERS] = {
-    {.name ="testy_tim", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 32, 86}
+    {NULL},
+    {.name ="testy_tim", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 32, 86},
+    {.name = "fooly_barton", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 55, 100}
 };
 KeyItem world_goal_items[ALL_KEYITEMS];
 void init_char_dialogues();
@@ -541,8 +549,7 @@ int get_next_empty_keyitem();
 int interact_char_ind;
 void render_key_items();
 void handle_key_item_pickup();
-int dia_ind = 0;
-int foo;
+int dia_ind = -1;
 void collisions_world();
 bool world_vel_inverted;
 Uint32 vel_inv_start;
@@ -644,8 +651,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     ship_mon_left.x = 100.0, ship_mon_left.y = WINDOW_HEIGHT / 2 - PLAYER_HEIGHT - 20, ship_mon_left.w = PLAYER_WIDTH, ship_mon_left.h = PLAYER_HEIGHT;
     ship_mon_right.x = 100.0, ship_mon_right.y = WINDOW_HEIGHT / 2 + PLAYER_HEIGHT + 20, ship_mon_right.w = PLAYER_WIDTH, ship_mon_right.h = PLAYER_HEIGHT;
     snprintf(player_proj.type,sizeof(player_proj.type), "saw");
-    snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
-    snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
+    //snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), "norm");
+    //snprintf(ship_bottom_proj.type, sizeof(ship_bottom_proj.type), "norm");
 
     srand((unsigned)time(NULL)); // seed
     gm_target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, gm_map_w, gm_map_h);
@@ -1159,10 +1166,19 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         render_characters();
         render_key_items();
  
-        handle_character_interact();
+        interact_char_ind = handle_character_interact();
+        //SDL_Log("interact char index : %d", interact_char_ind);
+        if (interact_char_ind==0){
+            entered_dia = false;
+            
+            supress_interact = false;
+            dia_ind = -1;
+            interact_char_ind = 0;
+           // SDL_Log("Dia ind reset - %d", dia_ind);
+        }
 
 
-        progress_character_dia(interact_char_ind);
+        progress_character_dia();
         
         handle_key_item_pickup();
         move_world();
@@ -1832,6 +1848,8 @@ void load_player_proj() {
     ship_bottom_proj.rects.h = PROJECTILE_HEIGHT;
     ship_bottom_proj.rects.x = ship_mon_right.x;
     ship_bottom_proj.rects.y = ship_mon_right.y + (PROJECTILE_HEIGHT / 2);
+    snprintf(ship_top_proj.type, sizeof(ship_top_proj.type), player_mons[0].proj_type);
+    snprintf(ship_bottom_proj.type, sizeof(ship_bottom_proj.type), player_mons[1].proj_type);
     player_loaded = true;
 }
 int accel_projectile() {
@@ -1896,6 +1914,26 @@ void accel_player_proj() {
                     player_proj.rects.y  = saw_sign == -1? player_proj.rects.y - track_velocity  : player_proj.rects.y + track_velocity ;
    
                 }
+                //top and bottom (mon) projs
+
+                if (strcmp(ship_top_proj.type, "sine") == 0) {
+                    ship_top_proj.rects.y += sin(sqrt(ship_top_proj.rects.x)) * track_velocity;
+                }
+                else if (strcmp(ship_top_proj.type, "saw") == 0) {
+
+                    ship_top_proj.rects.y = saw_sign == -1 ? ship_top_proj.rects.y - track_velocity : ship_top_proj.rects.y + track_velocity;
+
+                }
+
+                if (strcmp(ship_bottom_proj.type, "sine") == 0) {
+                    ship_bottom_proj.rects.y += sin(sqrt(ship_bottom_proj.rects.x)) * track_velocity;
+                }
+                else if (strcmp(ship_bottom_proj.type, "saw") == 0) {
+
+                    ship_bottom_proj.rects.y = saw_sign == -1 ? ship_bottom_proj.rects.y - track_velocity : ship_bottom_proj.rects.y + track_velocity;
+
+                }
+
                 //mouse above
                 if (mouse_y < player_rect.y) {
                     
@@ -3045,9 +3083,13 @@ void reset_inp_queue(){
 
 void init_char_dialogues(){
     //testy tim
-    snprintf(characters[0].dialogues[0].buffer, sizeof(characters[0].dialogues[0].buffer), "Hey, hows it goin?");
-    snprintf(characters[0].dialogues[1].buffer, sizeof(characters[0].dialogues[1].buffer), "Get me that gold and I will give you the key to unlock that area");
-    snprintf(characters[0].dialogues[2].buffer, sizeof(characters[0].dialogues[2].buffer), "Ok good, here's the key");
+    snprintf(characters[1].dialogues[0].buffer, sizeof(characters[1].dialogues[0].buffer), "Hey, hows it goin?");
+    snprintf(characters[1].dialogues[1].buffer, sizeof(characters[1].dialogues[1].buffer), "Get me that gold and I will give you the key to unlock that area");
+    snprintf(characters[1].dialogues[2].buffer, sizeof(characters[1].dialogues[2].buffer), "Ok good, here's the key");
+
+    snprintf(characters[2].dialogues[0].buffer, sizeof(characters[2].dialogues[0].buffer), "I need help.");
+    snprintf(characters[2].dialogues[1].buffer, sizeof(characters[2].dialogues[1].buffer), "Get me that thingy and I will get you the key to unlock the other area.");
+    snprintf(characters[2].dialogues[2].buffer, sizeof(characters[2].dialogues[2].buffer), "Ok thanks, here.");
 }
 
 void init_character_locs(){
@@ -3065,34 +3107,54 @@ void init_character_locs(){
 }
 
 void init_key_items(){
-    snprintf(characters[0].goal_items[0].name,sizeof(characters[0].goal_items[0].name),  "test key");
-    snprintf(characters[0].reward_items[0].name, sizeof(characters[0].reward_items[0].name), "test reward");
-    characters[0].goal_items[0].location.row =10;
-    characters[0].goal_items[0].location.col = 10;
-    characters[0].dialogue_stops[0].stop_ind = 1;
-    characters[0].goal_items[0].ds = 1;
-    world_areas[14].key = characters[0].reward_items[0];
+    //NULL CHARACTER
+
+    snprintf(characters[1].goal_items[0].name,sizeof(characters[1].goal_items[0].name),  "test key");
+    snprintf(characters[1].reward_items[0].name, sizeof(characters[1].reward_items[0].name), "test reward");
+    characters[1].goal_items[0].location.row =6;
+    characters[1].goal_items[0].location.col =7;
+    characters[1].dialogue_stops[0].stop_ind = 1;
+    snprintf(characters[1].dialogue_stops[0].id, sizeof(characters[1].dialogue_stops[0].id), "0000");
+    snprintf(characters[1].goal_items[0].dialogue_stop.id, sizeof(characters[1].goal_items[0].dialogue_stop.id), "0000");
+    characters[1].goal_items[0].ds = 1;
+    world_areas[14].key = characters[1].reward_items[0];
+
+    snprintf(characters[2].goal_items[0].name, sizeof(characters[2].goal_items[0].name), "foobar key");
+    snprintf(characters[2].reward_items[0].name, sizeof(characters[2].reward_items[0].name), "foobar reward");
+    characters[2].goal_items[0].location.row = 5;
+    characters[2].goal_items[0].location.col = 5;
+    characters[2].dialogue_stops[0].stop_ind = 1;
+    snprintf(characters[2].dialogue_stops[0].id, sizeof(characters[2].dialogue_stops[0].id), "0001");
+    snprintf(characters[2].goal_items[0].dialogue_stop.id, sizeof(characters[2].goal_items[0].dialogue_stop.id), "0001");
+    characters[2].goal_items[0].ds = 1;
+    world_areas[15].key = characters[2].reward_items[0];
     
 
     
         
-
-    for (int j =0; j<ALL_ROWS*ALL_COLS; j++){
-        for (int i = 0; i < ALL_CHARACTERS; i++) {
-            for (int k = 0; k < MAX_GOAL_ITEMS; k++) {
-            if(characters[i].goal_items[k].location.row == under_tiles[j].row && characters[i].goal_items[k].location.col == under_tiles[j].col){
-                world_goal_items[k] = characters[i].goal_items[k];
-                world_goal_items[k].ds = characters[i].goal_items[k].ds;
+    int k = 0;
+    for (int i = 0; i < ALL_CHARACTERS; i++) {
+        for (int j =0; j<ALL_ROWS*ALL_COLS; j++){
+            for (int p =0; p< MAX_GOAL_ITEMS; p++){
+            
+            if((characters[i].goal_items[k].location.row == under_tiles[j].row) && (characters[i].goal_items[p].location.col == under_tiles[j].col) && strcmp(characters[i].goal_items[p].name, "") !=0){
+                world_goal_items[k] = characters[i].goal_items[p];
+                world_goal_items[k].ds = characters[i].goal_items[p].ds;
                 world_goal_items[k].rect.x = under_tiles[j].rect.x;
                 world_goal_items[k].rect.y = under_tiles[j].rect.y;
                 world_goal_items[k].rect.w = ITEM_WIDTH;
                 world_goal_items[k].rect.h = ITEM_HEIGHT;
-                SDL_Log("goal item placed at x =%f , y=%f ", world_goal_items[k].rect.x, world_goal_items[k].rect.y);
+                SDL_Log("goal item %s placed at x =%f , y=%f ",&world_goal_items[k].name, world_goal_items[k].rect.x, world_goal_items[k].rect.y);
+                k++;
+                if(strcmp(characters[i].goal_items[p].name, "") == 0){
+                    break;
+                }
                 }
             }
         }
     }
 }
+
 
 
 void render_characters(){
@@ -3111,62 +3173,71 @@ int handle_character_interact(){
 
     for (int i=0;  i < ALL_CHARACTERS; i++) {
         if((abs(world_player.rect.x - characters[i].rect.x) < TILE_WIDTH) && (abs(world_player.rect.y - characters[i].rect.y) < TILE_HEIGHT*2)){
-            if(!supress_interact){
-                if(space_pressed){
-                    SDL_Log("entering dialogue");
-                    entered_dia = true;
-                    interact_char_ind = i;
-                    supress_interact = true;
-                }
+ 
+            if(space_pressed){
+                SDL_Log("entering dialogue");
+                entered_dia = true;
+                dia_ind = 0;
+                    
+                
             }
+
+            return i;
         }
-        if (!(abs(world_player.rect.x - characters[interact_char_ind].rect.x) < TILE_WIDTH) && !(abs(world_player.rect.y - characters[interact_char_ind].rect.y) < TILE_HEIGHT * 2)){
-            entered_dia = false;
-            supress_interact = false;
-        }
-        
     }
+
+        
+    
+    dia_ind = -1;
+    return 0;
 
     
 }
 //takes the characters index returned from handle_character_interact as a param
 void progress_character_dia(){
     
-    if(entered_dia){
+    if(entered_dia && interact_char_ind!=0){
         SDL_Log("Dia ind- %d", dia_ind);
         render_text(characters[interact_char_ind].rect.x, characters[interact_char_ind].rect.y, white, characters[interact_char_ind].dialogues[dia_ind].buffer, font);
 
         int ds_ind = characters[interact_char_ind].ds_ind;
-                
-        if(shift_pressed){
-            if(dia_ind != characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind && characters[interact_char_ind].dialogue_stops[ds_ind].passed!=true){
-                dia_ind++;
-                foo++;
+        SDL_Log("ds_ind : %d", ds_ind);
+        
+        if(dia_ind != characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind && characters[interact_char_ind].dialogue_stops[ds_ind].passed!=true && dia_ind !=-1){
+            if (shift_pressed) {
+                dia_ind++;//this seems to be triggering
+                SDL_Log("Dia ind increased- %d", dia_ind);
+                shift_pressed = false;
             }
-            else if(dia_ind== characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind && characters[interact_char_ind].dialogue_stops[ds_ind].passed != true){
-                for(int k =0; k< MAX_GOAL_ITEMS; k++){
+        }
+        else if( dia_ind >-1 && dia_ind == characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind){
+            SDL_Log("entering dialogue check condition 0");
+            for(int k =0; k< MAX_GOAL_ITEMS; k++){
 
-                        if(world_player.key_items[k].ds == characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind ){
-
-                            characters[interact_char_ind].dialogue_stops[ds_ind].passed = true;
+                    if( ( strcmp(characters[interact_char_ind].dialogue_stops[ds_ind].id, world_player.key_items[k].dialogue_stop.id) ==0)){
+                        SDL_Log("entering dialogue check condition 1");
+                        characters[interact_char_ind].dialogue_stops[ds_ind].passed = true;
                             
-                            
+                        if (shift_pressed) {
                             int x = get_next_empty_keyitem();
-                            dia_ind++;
+                                 
                             world_player.key_items[x] = characters[interact_char_ind].reward_items[ds_ind];
                             world_player.key_items[x].obtained = true;
                             if(characters[interact_char_ind].dialogue_stops[ds_ind+1].stop_ind!=0){
                                 characters[interact_char_ind].ds_ind += 1;
                             }
+                            dia_ind++;
+                                
+                            shift_pressed = false;
                         }
                     }
                 }
             }
         }
-        
-        
-
     
+    
+
+
     
 }
 
@@ -3174,18 +3245,20 @@ void handle_key_item_pickup(){
 
     for (int i = 0; i < ALL_KEYITEMS; i++) {
         
-        
+        if(strcmp(world_goal_items[i].name, "") !=0){
         if ((abs(world_player.rect.x - world_goal_items[i].rect.x) < PICKUP_RADIUS) && (abs(world_player.rect.y - world_goal_items[i].rect.y) < PICKUP_RADIUS)){
 
             if (!world_goal_items[i].obtained) {
                 int x = get_next_empty_keyitem();
 
                 world_player.key_items[x] = world_goal_items[i];
-                SDL_Log("item obtained");
+                SDL_Log("item obtained - %s", world_goal_items[i].name);
                 world_player.key_items[x].obtained = true;
                 world_goal_items[i].obtained = true;
+                break;
 
             }
+        }
         }
 
     }
@@ -3210,10 +3283,11 @@ int get_next_empty_keyitem(){
 void render_key_items(){
 
     for (int k = 0; k < ALL_KEYITEMS; k++) {
-        if ((abs(world_goal_items[k].rect.x - world_player.rect.x) < WINDOW_WIDTH) && (abs(world_goal_items[k].rect.y - world_player.rect.y) < WINDOW_HEIGHT) && (world_goal_items[k].location.row !=0 && world_goal_items[k].location.col != 0)){
+        //culling isnt right here so commented out
+        //if ((abs(world_goal_items[k].rect.x - world_player.rect.x) < WINDOW_WIDTH) && (abs(world_goal_items[k].rect.y - world_player.rect.y) < WINDOW_HEIGHT) && (world_goal_items[k].location.row !=0 && world_goal_items[k].location.col != 0)){
             render_rect(renderer, world_goal_items[k].rect, red);
             //SDL_Log("Rendering item");
-        }
+        //}
     }
     
 }
@@ -3248,7 +3322,7 @@ void collisions_world(){
         }
         vel_inv_elapsed = SDL_GetTicks() - vel_inv_start;
         if (vel_inv_elapsed > vel_inv_delay) {
-            world_velocity = 5.0;
+            world_velocity = WORLD_VELOCITY_DEBUG;
             SDL_Log("velocity un-inverted");
             world_player_coll = false;
             world_vel_inverted = false;
@@ -3379,7 +3453,7 @@ void render_animation(
     SDL_RenderTexture(renderer, texture, &src, &dst);
 
     if (*now - *last_time >= frame_delay) {
-        SDL_Log("next frame %d", *current_frame + 1);
+        //SDL_Log("next frame %d", *current_frame + 1);
         *current_frame = (*current_frame + 1) % total_frames;
         *last_time = SDL_GetTicks();
     }
