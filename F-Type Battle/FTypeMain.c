@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
+#include <ctype.h>
 
 #define MAX_RECTS 144
 #define RECT_WIDTH 270
@@ -53,6 +54,17 @@
 #define SPRITESHEET_MARGIN 2 
 #define WORLD_VELOCITY_DEBUG 20.0
 #define WORLD_VELOCITY 5.0
+#define ALL_PROJ_STRS 20
+#define ALL_UI_ELEMENTS 40
+#define UI_WIDTH 1920
+#define UI_HEIGHT 1080
+#define WHITE { 255, 255, 255, 255 }
+#define RED  { 255, 0, 0, 255 }
+#define BLUE  { 0, 0, 255, 255 }
+#define BLACK  { 0, 0, 0, 255 }
+#define GREEN  { 0, 255, 0, 255 }
+#define UI_SCROLL_MAX 3 //how many patterns or mons or listed objects can be on screen
+
 static SDL_Color white = { 255, 255, 255, 255 };
 static SDL_Color red = { 255, 0, 0, 255 };
 static SDL_Color blue = { 0, 0, 255, 255 };
@@ -124,6 +136,9 @@ bool space_pressed;
 bool acc_started;
 bool deacc_started;
 bool shift_pressed;
+bool esc_pressed;
+bool scrollup_pressed;
+bool scrolldown_pressed;
 
 float player_velocity = 0.2*20;//for button input controls(without culling must be higher due to hardware slowdown. might be something of a problem once release build)
 float track_velocity = 10.0 * 2;
@@ -268,6 +283,24 @@ Uint32 saw_start_time;
 Uint32 saw_elapsed;
 int saw_sign = -1;
 
+typedef struct {
+    char str[40];
+    bool owned;
+}ProjectileString;
+ProjectileString world_proj_strs[ALL_PROJ_STRS] = {
+    {"normal"},
+    {"sine"},
+    {"saw"}
+};
+ProjectileString player_proj_strs[ALL_PROJ_STRS] = {
+    {"normal"},
+    {"sine"},
+    {"saw"},
+    {"foo"},
+    {"bar"},
+};
+
+
 
 //GAME STATE ENUM
 typedef enum {
@@ -280,7 +313,7 @@ typedef enum {
 
 }GameState;
 
-GameState game_state = GAMESTATE_WORLD;
+GameState game_state = GAMESTATE_TRACK;
 //MENU STATE ENUM(to be checked when in relevant states in nested switch)
 typedef enum {
     MENUSTATE_MAIN,
@@ -592,6 +625,100 @@ int walk_surface_w = 0;
 int walk_surface_h = 0;
 SDL_Texture* walk_texture = NULL;
 
+//USER INTERFACES
+
+typedef struct {
+    int layer; //if the layer is below 2, always render the element unconditionally and their blankets will be layered on top conditionally
+    SDL_FRect rect;//large background menu rendered behind
+    char label[120];
+    int index; //initialize by function by iterating through the UI array
+    bool got_activated; //when the element is clicked, set to true
+    int blanket_ind;//the index of the UI that will render as a consequence of the click (can be -1 for condition check)
+    bool is_sub_display;//if it is true, then it will check what its name is with strcmp, and then render the relevant list to be scrolled through
+    SDL_Color color;
+    bool interactable;
+    bool offscreen;
+}UI_Element;
+
+#define ui_center_x ( WINDOW_WIDTH / 2) -( UI_WIDTH / 2)
+#define ui_center_y ( WINDOW_HEIGHT / 2) - (UI_HEIGHT/ 2)
+#define ui_left_x  (WINDOW_WIDTH / 2) - (UI_WIDTH / 2) 
+#define ui_left_y  (WINDOW_HEIGHT / 2) - (UI_HEIGHT / 2) 
+#define ui_right_x  (WINDOW_WIDTH / 2) - (UI_WIDTH / 2) + 400
+#define ui_right_y  (WINDOW_HEIGHT / 2) - (UI_HEIGHT / 2) + 400
+
+int element_diplay_ind;//the index of the current element being diplayed over the background out of the elements array. (is_clicked? - render index or blanket index of array)
+
+//this type is for an array that can be populated dynamically based on what is being scrolled, like mons list or patterns list
+typedef struct {
+    char display_text[40];
+    //later a texture member can go alongside here
+}UI_Sub_Display;
+UI_Sub_Display curr_sub_disp_buff [UI_SCROLL_MAX];
+bool sub_buffer_filled;
+
+//when the user scroll, each index gets increased or decreased by 1 depending on scroll direction, and the display_text members of the curr_sub_disp_buff are snprintfd to the index of the list in question
+int scroll_indices [UI_SCROLL_MAX] = {0,1,2}; 
+
+/*/these will be rendered using a function/functions, this data structure will help facilitate the UI rendering. 
+if the layer is < 2, render the element
+    if the label is strcmped to be equipped patterns, render the player_proj.type text there
+    if the label is strcmped to be equipped mons, render the player_mons.name there 
+if the element got activated and has a blanket, render that element until back button is pressed once
+if the element is a sub display, check what its label name is, then snprintf the scroll indices of the curr_disp_buff , into the display_text member
+if the user presses an equip (equip left or equip right separate for mons) or info button, the middle of the curr_disp_buff is selected/*/
+
+UI_Element ui_elements[ALL_UI_ELEMENTS] = {
+    {0,{.h = UI_HEIGHT, .w= UI_WIDTH, .x=ui_center_x, .y= ui_center_y},"background", 0, false, -1,false, WHITE,false},
+    {1,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"equipped pattern", 1, false, 2,false, BLUE, true},
+    {2,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"your patterns", 2, false, 6, true, RED, true},//this will display the list of pattern strings, scrollable, scrolling just changes which indices are being rendered onto this rect. can equip pattern with button event?
+    {1,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_right_y},"equipped mons", 3, false, 4,false, BLUE, true},
+    {2,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_right_y},"your mons", 4, false, 5,true,  RED, true}, //this will display the list of mon names, scrollable, scrolling just changes which indices are being rendered onto this rect, can equip mon with buton event?
+    {3,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_right_y},"mon info", 5, false, 7, false, GREEN, true },//when a mon is selected in the select index when scrolling, will render that mons info
+    {4, {.h =400, .w =400, .x =ui_left_x-500, .y= ui_left_y}, "yn prompt pattern", 6, false, -1, false, BLUE, true},
+    {4, {.h = 400, .w = 400, .x = ui_left_x-500, .y = ui_right_y}, "yn prompt mon", 7, false, -1, false, BLUE, true},
+
+
+};
+void render_ui();
+
+bool ui_back_pressed;
+
+Monster player_mon_list[MAX_MONS] = {
+    {.name = "test0", .type = "type0", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 101, .wk = "A", .res = "B", .encountered = false,.turn = 1, .att_ind = NULL, .mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test1", .type = "type1", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 104,.wk = "A", .res = "B", .encountered = false, .turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "sine"},
+    {.name = "test2", .type = "type2", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 109,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test3", .type = "type3", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 103,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL,.mov_ind = NULL, .is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 106,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL, .mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 102,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+}; //player_mons[2] are the equipped mons, this is the entire list, is in party determines equip
+
+long ui_open;//even values are closed
+int mid_scr_ind;
+float offscreen_x = -1000;
+float x_copy = 0.0; //for saving position of UI before moving offscreen
+bool mon_list_size_gotten;
+size_t mon_list_size;
+size_t get_mon_list_size();
+void handle_scroll_event();
+float wheel_y;
+
+typedef enum {
+    UIS_CLOSED,
+    UIS_IDLE,
+    UIS_MON_LIST_OPEN,
+    UIS_PATTERN_LIST_OPEN,
+    
+
+}UI_STATE;
+UI_STATE ui_state = UIS_CLOSED;
+
+int pattern_list_size;
+int get_pattern_list_size();
+
+bool pattern_list_size_gotten;
+
+bool yesno;
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -627,6 +754,34 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         SDL_Quit();
         return SDL_APP_FAILURE;
     }
+    //DISPLAY
+
+//set window conditionally based on bounds
+    if (bounds.w < 3840 && bounds.w>1920) {
+        drawable_w = 2560;
+        drawable_h = 1440;
+
+
+    }
+    else if (bounds.w < 2560 && bounds.w>1280) {
+        drawable_w = 1920;
+        drawable_h = 1080;
+    }
+    else if (bounds.w < 1920 && bounds.w>640) {
+        drawable_w = 1280;
+        drawable_h = 720;
+    }
+    else {
+        drawable_w = bounds.w;
+        drawable_h = bounds.h;
+    }
+
+    window_x_scale = (float)drawable_w / WINDOW_WIDTH;
+    window_y_scale = (float)drawable_h / WINDOW_HEIGHT;
+    SDL_SetRenderScale(renderer, window_x_scale, window_y_scale);
+
+    SDL_Log("Logical size: %dx%d, Drawable size: %dx%d, Scale: %.2fx, %.2fy",
+        window_w, window_h, drawable_w, drawable_h, window_x_scale, window_y_scale);
     font = TTF_OpenFont("./fonts/amiga.ttf", 35);
     if (!font) {
         SDL_Log("Couldn't load font: %s", SDL_GetError());
@@ -686,6 +841,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
         return SDL_APP_SUCCESS;
     }
     if (event->type == SDL_EVENT_KEY_DOWN) {
+
         if (!input_queue_full()) {
             switch (event->key.key) {
             case SDLK_D:
@@ -714,11 +870,15 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
             case SDLK_LSHIFT:
                 shift_pressed = true;
                 break;
+            case SDLK_ESCAPE:
+                esc_pressed = true;
+                break;
             default:
                 break;
             }
         }
     }
+
     if (event->type == SDL_EVENT_KEY_UP) {
         reset_inp_queue();
         switch (event->key.key) {
@@ -741,12 +901,62 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
             break;
         }
     }
-    if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+
+    if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {//TODO seperate this logic by game state switch
+        SDL_FPoint p = { (float)event->button.x / window_x_scale, (float)event->button.y / window_y_scale };
         proj_pressed = true;
+        
+        for(int i =0; i<ALL_UI_ELEMENTS; i++){
+            if(SDL_PointInRectFloat(&p, &ui_elements[i].rect) && ui_elements[i].interactable){
+                ui_back_pressed = false;
+                element_diplay_ind = i;
+                if (strcmp(ui_elements[i].label, "yn prompt pattern") == 0 || strcmp(ui_elements[i].label, "yn prompt mon") == 0)  {
+
+                    if (p.x > (ui_elements[i].rect.x + ui_elements[i].rect.w / 2)) {
+                        yesno = false;
+                        
+                    }
+                    else {
+                        yesno = true;
+                        SDL_Log("yesno true");
+                        
+                    }
+                }
+                break;
+                
+
+            }
+
+            
+        }
+        ui_elements[element_diplay_ind].got_activated = true;
+        if(event->button.button== SDL_BUTTON_RIGHT){
+            ui_back_pressed = true;
+        }
     }
+
     if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
         proj_pressed = false;
     }
+
+    if(event->type == SDL_EVENT_MOUSE_WHEEL){
+        SDL_Log("wheel detected");
+
+        
+        if(event->wheel.y > 0){
+            SDL_Log("direction >0");
+            scrollup_pressed = true;
+        }
+
+        if (event->wheel.y < 0) {
+            SDL_Log("direction <0");
+            scrolldown_pressed = true;
+        }
+        
+
+
+    }
+
     switch(game_state){
     case GAMESTATE_TRACK:
     {
@@ -843,6 +1053,37 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
             break;
             
         }
+        if(esc_pressed){
+            ui_open += 1;
+            ui_state = UIS_IDLE;
+            if(!mon_list_size_gotten){
+                mon_list_size = get_mon_list_size();
+                mon_list_size_gotten = true;
+            }
+            if (!pattern_list_size_gotten) {
+                pattern_list_size = get_pattern_list_size();
+                pattern_list_size_gotten = true;
+            }
+
+        }
+        if (ui_open % 2 != 0) {
+            
+            render_ui();
+            handle_scroll_event();
+        }
+        else{
+            //make sure a different sized list including new mons or patterns can be accounted for whenever ui is not open
+
+            ui_back_pressed = true;
+
+
+            mon_list_size_gotten = false;
+            pattern_list_size_gotten = false;
+
+            ui_state = UIS_CLOSED;
+        }
+        esc_pressed = false;
+
         break;
     }
     case GAMESTATE_BATTLE_START:
@@ -2138,7 +2379,7 @@ void collision_events() {
                     if (check_rect_overlap(&ship_mon_right, &new_track[i].corner[j], NULL) == 1) {
                         track_coll_count++;
                         coll_bottom = true;
-                        SDL_Log("Collision bottom %d", track_coll_count);
+                        //SDL_Log("Collision bottom %d", track_coll_count);
                         if (ship_mon_right.y - ship_mon_right.h > new_track[i].corner[j].y)
                         {
                             coll_bottom = true;
@@ -2150,7 +2391,7 @@ void collision_events() {
                     if (check_rect_overlap(&ship_mon_left, &new_track2[i].corner[j], NULL) == 1) {
                         track_coll_count++;
                         coll_top = true;
-                        SDL_Log("Collision top %d", track_coll_count);
+                        //SDL_Log("Collision top %d", track_coll_count);
                         if (ship_mon_left.y < new_track2[i].corner[j].y + ship_mon_left.h)
                         {
                             coll_top = true;
@@ -3457,4 +3698,228 @@ void render_animation(
         *current_frame = (*current_frame + 1) % total_frames;
         *last_time = SDL_GetTicks();
     }
+}
+
+void render_ui(){
+        /*/these will be rendered using a function/functions, this data structure will help facilitate the UI rendering.
+    if the layer is < 2, render the element
+        if the label is strcmped to be equipped patterns, render the player_proj.type text there
+        if the label is strcmped to be equipped mons, render the player_mons.name there
+    if the element got activated and has a blanket, render that element until back button is pressed once
+    if the element is a sub display, check what its label name is, then snprintf the scroll indices of the curr_disp_buff , into the display_text member
+    if the user presses an equip (equip left or equip right separate for mons) or info button, the middle of the curr_disp_buff is selected/*/
+    
+    for(int i=0; i< ALL_UI_ELEMENTS; i++){
+       
+        if(ui_elements[i].layer <2){
+            
+            render_rect(renderer, ui_elements[i].rect, ui_elements[i].color);
+            
+            if(strcmp(ui_elements[i].label, "equipped pattern") ==0){
+                render_text(ui_elements[i].rect.x, ui_elements[i].rect.y, black, player_proj.type, font);
+            }
+            
+            if (strcmp(ui_elements[i].label, "equipped mons") == 0) {
+                render_text(ui_elements[i].rect.x, ui_elements[i].rect.y, black, player_mons[0].name, font);
+                render_text(ui_elements[i].rect.x, ui_elements[i].rect.y +100, black, player_mons[1].name, font);
+            }
+
+        }
+        if(ui_elements[i].got_activated && ui_elements[i].blanket_ind >-1){
+            
+            
+            //the blanket index will be used unless back is pressed, and if it doesnt have a subdisplay the below logic wont happen
+            int blnk = ui_back_pressed? i: ui_elements[i].blanket_ind;
+            float offset_newline = 0.0;
+            render_rect(renderer, ui_elements[blnk].rect, ui_elements[blnk].color);//TODO until go back is pressed
+            
+            if (ui_elements[blnk].blanket_ind>-1){
+                x_copy = ui_elements[blnk].rect.x;
+                ui_elements[i].rect.x = offscreen_x;
+            }
+            
+            if(ui_elements[blnk].is_sub_display){
+
+  
+                if (strcmp(ui_elements[blnk].label, "your patterns") ==0 && ui_state!= UIS_MON_LIST_OPEN){
+
+                    ui_state = UIS_PATTERN_LIST_OPEN;
+
+                    if(!sub_buffer_filled){//on scroll, refilled and reset
+
+                        for(int j =0; j< UI_SCROLL_MAX; j++){
+                            int scr_ind = scroll_indices[j];
+                            mid_scr_ind = scroll_indices[1];//the middle in list that gets activated has its info displayed
+                            //try to avoid potential out of bounds here
+                            if( strcmp(player_proj_strs[scr_ind].str, "") !=0){
+                                snprintf(curr_sub_disp_buff[j].display_text, sizeof(curr_sub_disp_buff[j].display_text), player_proj_strs[scr_ind].str);
+                            }
+                        }
+                        sub_buffer_filled = true;
+                    }
+                    for (int p = 0; p < UI_SCROLL_MAX; p++) {
+                        render_text(ui_elements[blnk].rect.x, ui_elements[blnk].rect.y +offset_newline, black, curr_sub_disp_buff[p].display_text, font );
+                        offset_newline += 100;
+                    }
+
+                }
+                if (strcmp(ui_elements[blnk].label, "your mons") == 0 && ui_state != UIS_PATTERN_LIST_OPEN) {
+
+                    ui_state = UIS_MON_LIST_OPEN;
+
+                    if (!sub_buffer_filled) {//on scroll, refilled and reset
+
+                        for (int k = 0; k < UI_SCROLL_MAX; k++) {
+                            int scr_ind = scroll_indices[k];
+                            SDL_Log("Scroll index [k] = %i within your mons strcmp check", scroll_indices[k]);
+                            mid_scr_ind = scroll_indices[1];//the middle in list that gets activated has its info displayed
+                            //try to avoid potential out of bounds here
+                            if (player_mon_list[scr_ind].spd != 0){
+                                snprintf(curr_sub_disp_buff[k].display_text, sizeof(curr_sub_disp_buff[k].display_text), player_mon_list[scr_ind].name);
+                            }
+                        }
+                        sub_buffer_filled = true;
+                    }
+                    for (int m = 0; m < UI_SCROLL_MAX; m++) {
+                        render_text(ui_elements[blnk].rect.x, ui_elements[blnk].rect.y + offset_newline, black, curr_sub_disp_buff[m].display_text, font);
+                        offset_newline += 100;
+                    }
+                   
+                }
+ 
+            }
+            if (strcmp(ui_elements[blnk].label, "mon info") == 0) { //< not a sub display, so goes outside the condition check
+                render_text(ui_elements[blnk].rect.x, ui_elements[blnk].rect.y, black, player_mon_list[mid_scr_ind].type, font);
+            }
+            if (strcmp(ui_elements[blnk].label, "yn prompt pattern") == 0){
+                render_text(ui_elements[blnk].rect.x, ui_elements[blnk].rect.y, black, "Equip?", font);
+                if (yesno) {
+                    snprintf(player_proj.type, sizeof(player_proj.type), player_proj_strs[mid_scr_ind].str);
+                    SDL_Log("Player pattern changed");
+                    ui_open += 1;
+                    yesno = false;
+                }
+            }
+            if (strcmp(ui_elements[blnk].label, "yn prompt mon") == 0) {
+                render_text(ui_elements[blnk].rect.x, ui_elements[blnk].rect.y, black, "Equip?", font);
+                if (yesno) {
+                    player_mons[0] = player_mon_list[mid_scr_ind];
+                    load_ship_mons();
+                    SDL_Log("Player mon changed");
+                    ui_open += 1;
+                    yesno = false;
+                }
+            }
+
+ 
+        }
+
+
+        if(ui_back_pressed){
+            sub_buffer_filled = false;
+            for (int u = 0; u < ALL_UI_ELEMENTS; u++) {
+                if(ui_elements[u].rect.x == offscreen_x){
+                    (ui_elements[u].rect.x = x_copy);
+                }
+                element_diplay_ind = 0;
+                ui_elements[u].got_activated = false;
+            }
+            ui_state = UIS_IDLE;
+        }
+
+    }
+
+
+
+
+}
+
+void handle_scroll_event(){
+    if(ui_state == UIS_MON_LIST_OPEN){
+        //SDL_Log("Mon list size %i", mon_list_size);
+        if (scrolldown_pressed ) {
+            if (scroll_indices[0] != mon_list_size - UI_SCROLL_MAX) {
+                sub_buffer_filled = false;
+                for (int i = 0; i < UI_SCROLL_MAX; i++) {
+                    
+  
+      
+                    scroll_indices[i] += 1;
+    
+                    SDL_Log("Scroll index [i] = %i", scroll_indices[i]);
+            
+                }
+            }
+        }
+        if(scrollup_pressed){
+            if (scroll_indices[UI_SCROLL_MAX-1] != UI_SCROLL_MAX - 1) {
+            
+        
+                sub_buffer_filled = false;
+                for(int j=0; j<UI_SCROLL_MAX; j++){
+
+
+                    scroll_indices[j] -= 1;
+
+                    SDL_Log("Scroll index [j] = %i", scroll_indices[j]);
+           
+                }
+            }
+        }
+    }
+    if (ui_state == UIS_PATTERN_LIST_OPEN) {
+        //SDL_Log("patt list size %i", pattern_list_size);
+        if (scrolldown_pressed) {
+            if (scroll_indices[0] != pattern_list_size - UI_SCROLL_MAX) {
+                sub_buffer_filled = false;
+                for (int i = 0; i < UI_SCROLL_MAX; i++) {
+                    
+
+
+                    scroll_indices[i] += 1;
+
+                    SDL_Log("Scroll index [i] = %i", scroll_indices[i]);
+
+                }
+            }
+        }
+        if (scrollup_pressed) {
+            if (scroll_indices[UI_SCROLL_MAX - 1] != UI_SCROLL_MAX - 1) {
+
+
+                sub_buffer_filled = false;
+                for (int j = 0; j < UI_SCROLL_MAX; j++) {
+
+
+                    scroll_indices[j] -= 1;
+
+                    SDL_Log("Scroll index [j] = %i", scroll_indices[j]);
+
+                }
+            }
+        }
+
+    }
+
+    scrolldown_pressed = false;
+    scrollup_pressed = false;
+}
+
+size_t get_mon_list_size(){
+    size_t size = 0;
+    size = sizeof(player_mon_list) / sizeof(Monster);
+    return size;
+}
+
+int get_pattern_list_size() {
+    int sc = 0;
+    for(int i=0; i< ALL_PROJ_STRS; i++){
+
+        if(isalpha(player_proj_strs[i].str[1])){
+            sc++;
+        }
+
+    }
+    
+    return sc;
 }
