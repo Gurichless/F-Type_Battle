@@ -703,7 +703,7 @@ UI_Element shop_ui_elements[ALL_UI_ELEMENTS] = {
     {1,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"Buy", 1, false, 2,false, BLUE, true},
     {2,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"Available Patterns", 2, false, 5, true, RED, true},
     {1,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_right_y},"Sell", 3, false, 4,false, BLUE, true},
-    {2,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"Your Sellable Patterns", 4, false, 6, true, RED, true},
+    {2,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_right_y},"Your Sellable Patterns", 4, false, 6, true, RED, true},
     {3, {.h = 400, .w = 400, .x = ui_left_x - 500, .y = ui_left_y}, "yn prompt buy", 5, false, -1, false, BLUE, true},
     {3, {.h = 400, .w = 400, .x = ui_left_x - 500, .y = ui_right_y}, "yn prompt sell", 6, false, -1, false, BLUE, true},
 
@@ -4104,8 +4104,9 @@ void render_shop_ui(){
                             finger = p;
                         }
                     }
-                    //set the player proj str list '-' to the mid scr ind
-                    snprintf(player_proj_strs[finger].str, sizeof(player_proj_strs[finger].str), shop_proj_strs[mid_scr_ind].str);
+                    //set the memory of the player proj str list '-' to the memory of the mid scr ind
+                    player_proj_strs[finger] = shop_proj_strs[mid_scr_ind];
+                    
                     //set the new bookend
                     snprintf(player_proj_strs[finger+1].str, sizeof(player_proj_strs[finger+1].str), "-");
                     shop_ui_open += 1;
@@ -4131,8 +4132,8 @@ void render_shop_ui(){
                         }
                     }
  
-                    //set the shop str list '-' to the mid scr ind
-                    snprintf(shop_proj_strs[finger].str, sizeof(shop_proj_strs[finger].str), player_proj_strs[mid_scr_ind].str);
+                    //set the memory of the shop str list '-' to the memory of the  mid scr ind
+                    shop_proj_strs[finger] =player_proj_strs[mid_scr_ind];
                     //set the new bookend
                     snprintf(shop_proj_strs[finger + 1].str, sizeof(shop_proj_strs[finger + 1].str), "-");
                     shop_ui_open += 1;
