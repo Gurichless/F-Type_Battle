@@ -20,7 +20,7 @@
 #define ITEM_WIDTH 100
 #define ITEM_HEIGHT 100
 #define MAX_ITEMS 6
-#define MAX_MONS 6
+#define MAX_MONS 12
 #define MON_WIDTH 200
 #define MON_HEIGHT 200
 #define PROJECTILE_WIDTH 50
@@ -139,6 +139,8 @@ bool shift_pressed;
 bool esc_pressed;
 bool scrollup_pressed;
 bool scrolldown_pressed;
+bool e_pressed;
+bool debug_change_state_pressed;
 
 float player_velocity = 0.2*20;//for button input controls(without culling must be higher due to hardware slowdown. might be something of a problem once release build)
 float track_velocity = 10.0 * 2;
@@ -285,21 +287,32 @@ int saw_sign = -1;
 
 typedef struct {
     char str[40];
+    int price;
     bool owned;
 }ProjectileString;
 ProjectileString world_proj_strs[ALL_PROJ_STRS] = {
-    {"normal"},
-    {"sine"},
-    {"saw"}
+    {"normal", .price = 100},
+    {"sine", .price = 100},
+    {"saw", .price = 100}
 };
 ProjectileString player_proj_strs[ALL_PROJ_STRS] = {
-    {"normal"},
-    {"sine"},
-    {"saw"},
-    {"foo"},
-    {"bar"},
+    {"-"},
+    {"normal", .price = 100},
+    {"sine", .price = 100},
+    {"saw", .price = 100},
+    {"foo", .price = 100},
+    {"bar", .price = 100},
+    {"-"},
 };
-
+ProjectileString shop_proj_strs[ALL_PROJ_STRS] = {
+    {"-"},
+    {"test_buying_pattern_0", .price = 100},
+    {"test_buying_pattern_1", .price = 100},
+    {"test_buying_pattern_2", .price = 100},
+    {"test_buying_pattern_3", .price = 100},
+    {"test_buying_pattern_4", .price = 100},
+    {"-"},
+};
 
 
 //GAME STATE ENUM
@@ -548,6 +561,8 @@ typedef struct {
     SDL_FRect rect;
     int lrow;
     int lcol;
+    bool is_vendor;
+    int wallet;//only relevant for vendors
     Dialogue dialogues[MAX_DIAS];//an array of 20 char buffers that are 80 chars wide each, will be initiated with a function TODO
     KeyItem goal_items[MAX_GOAL_ITEMS]; //an array of potential key items that the character wants to the player to obtain for matcing and deciding goals achieved
     KeyItem reward_items[MAX_GOAL_ITEMS]; //an array of potential reward key items for goals achieved
@@ -560,14 +575,16 @@ typedef struct {
     int lrow;
     int lcol;
     KeyItem key_items[ALL_KEYITEMS];
+    int wallet;
 }WorldPlayer;
 
-WorldPlayer world_player = { .rect = {.h = TILE_HEIGHT ,.w = TILE_WIDTH, .x = (WINDOW_WIDTH / 2) - (TILE_WIDTH / 2), .y = (WINDOW_HEIGHT / 2) - (TILE_HEIGHT / 2) }, .lrow = 1,.lcol = 1 };//will decide inital starting point and other location force changes with lrow and lcol
+WorldPlayer world_player = { .rect = {.h = TILE_HEIGHT ,.w = TILE_WIDTH, .x = (WINDOW_WIDTH / 2) - (TILE_WIDTH / 2), .y = (WINDOW_HEIGHT / 2) - (TILE_HEIGHT / 2) }, .lrow = 1,.lcol = 1, .wallet =500 };//will decide inital starting point and other location force changes with lrow and lcol
 
 Character characters [ALL_CHARACTERS] = {
     {NULL},
-    {.name ="testy_tim", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 32, 86},
-    {.name = "fooly_barton", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 55, 100}
+    {.name ="testy_tim", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 32, 86, .is_vendor =false},
+    {.name = "fooly_barton", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 } , 55, 100, .is_vendor =false},
+    {.name = "test vendor", .rect = {.h = TILE_HEIGHT * 2,.w = TILE_WIDTH, .x = 0, .y = 0 },67, 67, .is_vendor=true, .wallet = 1000},
 };
 KeyItem world_goal_items[ALL_KEYITEMS];
 void init_char_dialogues();
@@ -647,8 +664,8 @@ typedef struct {
 #define ui_right_x  (WINDOW_WIDTH / 2) - (UI_WIDTH / 2) + 400
 #define ui_right_y  (WINDOW_HEIGHT / 2) - (UI_HEIGHT / 2) + 400
 
-int element_diplay_ind;//the index of the current element being diplayed over the background out of the elements array. (is_clicked? - render index or blanket index of array)
-
+int element_display_ind;//the index of the current element being displayed over the background out of the elements array. (is_clicked? - render index or blanket index of array)
+int shop_element_display_ind;
 //this type is for an array that can be populated dynamically based on what is being scrolled, like mons list or patterns list
 typedef struct {
     char display_text[40];
@@ -680,17 +697,30 @@ UI_Element ui_elements[ALL_UI_ELEMENTS] = {
 
 
 };
-void render_ui();
 
+UI_Element shop_ui_elements[ALL_UI_ELEMENTS] = {
+    {0,{.h = UI_HEIGHT, .w = UI_WIDTH, .x = ui_center_x, .y = ui_center_y},"shop_background", 0, false, -1,false, WHITE,false},
+    {1,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"Buy", 1, false, 2,false, BLUE, true},
+    {2,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"Available Patterns", 2, false, 5, true, RED, true},
+    {1,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_right_y},"Sell", 3, false, 4,false, BLUE, true},
+    {2,{.h = 400, .w = 400 ,.x = ui_left_x, .y = ui_left_y},"Your Sellable Patterns", 4, false, 6, true, RED, true},
+    {3, {.h = 400, .w = 400, .x = ui_left_x - 500, .y = ui_left_y}, "yn prompt buy", 5, false, -1, false, BLUE, true},
+    {3, {.h = 400, .w = 400, .x = ui_left_x - 500, .y = ui_right_y}, "yn prompt sell", 6, false, -1, false, BLUE, true},
+
+};
+void render_ui();
+void render_shop_ui();
 bool ui_back_pressed;
 
 Monster player_mon_list[MAX_MONS] = {
+    {.name = "-"},
     {.name = "test0", .type = "type0", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 101, .wk = "A", .res = "B", .encountered = false,.turn = 1, .att_ind = NULL, .mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
     {.name = "test1", .type = "type1", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 104,.wk = "A", .res = "B", .encountered = false, .turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "sine"},
     {.name = "test2", .type = "type2", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 109,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
     {.name = "test3", .type = "type3", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 103,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL,.mov_ind = NULL, .is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
     {.name = "test4", .type = "type4", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 106,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL, .mov_ind = NULL,.is_in_party = false,.rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
     {.name = "test5", .type = "type5", .HP = MAX_MON_HP, .att = 100, .def = 100, .spd = 102,.wk = "A",.res = "B",.encountered = false,.turn = 1, .att_ind = NULL,.mov_ind = NULL,.is_in_party = false, .rect = {.w = MON_WIDTH, .h = MON_HEIGHT, .x = 0,.y = 0}, .moves = {{.name = "mov", .power = 10, .type = "typ" },{.name = "mov2", .power = 10, .type = "typ2" },{.name = "mov3", .power = 10, .type = "typ3" },{.name = "mov4", .power = 10, .type = "typ4" }}, "norm"},
+    {.name = "-"},
 }; //player_mons[2] are the equipped mons, this is the entire list, is in party determines equip
 
 long ui_open;//even values are closed
@@ -708,6 +738,9 @@ typedef enum {
     UIS_IDLE,
     UIS_MON_LIST_OPEN,
     UIS_PATTERN_LIST_OPEN,
+    UIS_SHOP_UI_IDLE,
+    UIS_BUY_LIST_OPEN,
+    UIS_SELL_LIST_OPEN
     
 
 }UI_STATE;
@@ -719,6 +752,13 @@ int get_pattern_list_size();
 bool pattern_list_size_gotten;
 
 bool yesno;
+int shop_ui_open;
+
+int shop_list_size;
+int sell_list_size;
+bool shop_sizes_gotten;
+int get_shop_list_size();
+bool near_vendor;
 //INITIALIZATION
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -873,11 +913,19 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
             case SDLK_ESCAPE:
                 esc_pressed = true;
                 break;
+            case SDLK_E:
+                e_pressed = true;
+                break;
+            case SDLK_G:
+                debug_change_state_pressed = true;
+                break;
             default:
                 break;
             }
         }
+
     }
+    
 
     if (event->type == SDL_EVENT_KEY_UP) {
         reset_inp_queue();
@@ -897,6 +945,12 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
         case SDLK_SPACE:
             space_pressed = false;
             break;
+        case SDLK_E:
+            e_pressed =false;
+            break;
+        case SDLK_G:
+            debug_change_state_pressed = false;
+            break;
         default:
             break;
         }
@@ -906,34 +960,73 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
         SDL_FPoint p = { (float)event->button.x / window_x_scale, (float)event->button.y / window_y_scale };
         proj_pressed = true;
         
-        for(int i =0; i<ALL_UI_ELEMENTS; i++){
-            if(SDL_PointInRectFloat(&p, &ui_elements[i].rect) && ui_elements[i].interactable){
-                ui_back_pressed = false;
-                element_diplay_ind = i;
-                if (strcmp(ui_elements[i].label, "yn prompt pattern") == 0 || strcmp(ui_elements[i].label, "yn prompt mon") == 0)  {
 
-                    if (p.x > (ui_elements[i].rect.x + ui_elements[i].rect.w / 2)) {
-                        yesno = false;
+            //regular UI case
+        if( ui_state == UIS_IDLE|| ui_state == UIS_MON_LIST_OPEN|| ui_state == UIS_PATTERN_LIST_OPEN){
+            for(int i =0; i<ALL_UI_ELEMENTS; i++){
+                if(SDL_PointInRectFloat(&p, &ui_elements[i].rect) && ui_elements[i].interactable){
+                    ui_back_pressed = false;
+                    element_display_ind = i;
+                    if (strcmp(ui_elements[i].label, "yn prompt pattern") == 0 || strcmp(ui_elements[i].label, "yn prompt mon") == 0)  {
+
+                        if (p.x > (ui_elements[i].rect.x + ui_elements[i].rect.w / 2)) {
+                            yesno = false;
                         
-                    }
-                    else {
-                        yesno = true;
-                        SDL_Log("yesno true");
+                        }
+                        else {
+                            yesno = true;
+                            SDL_Log("yesno true");
                         
+                        }
                     }
-                }
-                break;
+                    break;
                 
 
+                }
+                
             }
-
+            ui_elements[element_display_ind].got_activated = true;
+            if(event->button.button== SDL_BUTTON_RIGHT){
+                ui_back_pressed = true;
+            }
+        }
+        
+            //shop ui case
+        else if( ui_state == UIS_SHOP_UI_IDLE || ui_state == UIS_BUY_LIST_OPEN|| ui_state == UIS_SELL_LIST_OPEN){
             
+            for (int i = 0; i < ALL_UI_ELEMENTS; i++) {
+                if (SDL_PointInRectFloat(&p, &shop_ui_elements[i].rect) && shop_ui_elements[i].interactable) {
+                    ui_back_pressed = false;
+                    shop_element_display_ind = i;
+                    if (strcmp(shop_ui_elements[i].label, "yn prompt buy") == 0 || strcmp(shop_ui_elements[i].label, "yn prompt sell") == 0) {
+
+                        if (p.x > (shop_ui_elements[i].rect.x + shop_ui_elements[i].rect.w / 2)) {
+                            yesno = false;
+
+                        }
+                        else {
+                            yesno = true;
+                            SDL_Log("yesno true");
+
+                        }
+                    }
+                    break;
+
+
+                }
+
+            }
+            shop_ui_elements[shop_element_display_ind].got_activated = true;
+            if (event->button.button == SDL_BUTTON_RIGHT) {
+                ui_back_pressed = true;
+            }
         }
-        ui_elements[element_diplay_ind].got_activated = true;
-        if(event->button.button== SDL_BUTTON_RIGHT){
-            ui_back_pressed = true;
-        }
+
     }
+
+
+        
+    
 
     if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
         proj_pressed = false;
@@ -1065,6 +1158,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
                 pattern_list_size_gotten = true;
             }
 
+
+
         }
         if (ui_open % 2 != 0) {
             
@@ -1084,6 +1179,11 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         }
         esc_pressed = false;
 
+
+        if(debug_change_state_pressed){
+            game_state = GAMESTATE_WORLD;
+            break;
+        }
         break;
     }
     case GAMESTATE_BATTLE_START:
@@ -1091,7 +1191,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
         if(!mon_arr_populated){
 
-            init_player_mons();
+
             populate_mon_array();
             if (!turns_decided) {
                 dynamic_size = allocate_dynamic_battle_arr();
@@ -1427,7 +1527,34 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         render_animation(walk_total_frames, &walk_curr_frame, &walk_last_time, &now, walk_frame_delay, world_player.rect.x, world_player.rect.y, walk_texture, renderer, walking_src, walking_dst);
         collisions_world();
         unlock_areas();
-        
+        if(e_pressed && near_vendor){
+            shop_ui_open += 1;
+            ui_state = UIS_SHOP_UI_IDLE;
+            if (!shop_sizes_gotten) {
+                sell_list_size = get_pattern_list_size();
+                shop_list_size = get_shop_list_size();
+                shop_sizes_gotten = true;
+            }
+            e_pressed = false;
+
+        }
+        if (shop_ui_open % 2 != 0) {
+
+            render_shop_ui();
+            handle_scroll_event();
+        }
+        else {
+            //make sure a different sized list including new mons or patterns can be accounted for whenever ui is not open
+
+            ui_back_pressed = true;
+
+
+            shop_sizes_gotten = false;
+
+
+            ui_state = UIS_CLOSED;
+        }
+        esc_pressed = false;
         break;
     }
     case GAMESTATE_GRIDMAKER:
@@ -2014,8 +2141,10 @@ SDL_FRect gen_rand_mon_locations() {
 
 void populate_mons() {
     for (int i = 0; i < MAX_MONS; i++) {
-        monsters[i].rect = gen_rand_mon_locations();
-        SDL_Log("Monster %d at (%f, %f)", i, monsters[i].rect.x, monsters[i].rect.y);
+        if(monsters[i].spd !=0){
+            monsters[i].rect = gen_rand_mon_locations();
+            SDL_Log("Monster %d at (%f, %f)", i, monsters[i].rect.x, monsters[i].rect.y);
+        }
     }
 }
 void draw_mons() {
@@ -2515,6 +2644,10 @@ void populate_mon_array(){
         }
 
     }
+    player_mons[0].rect.w = MON_WIDTH;
+    player_mons[0].rect.h = MON_HEIGHT;
+    player_mons[1].rect.w = MON_WIDTH;
+    player_mons[1].rect.h = MON_HEIGHT;
     battle_array[MAX_MONS ] = player_mons[0];
     battle_array[MAX_MONS + 1] = player_mons[1];
     battle_array[MAX_MONS].is_in_party = true;
@@ -2538,13 +2671,13 @@ void render_battle_mons(){
     for(int j =0; j< dynamic_size; j++){
         if(dynamic_battle_array[j].is_in_party){
 
-            dynamic_battle_array[j].rect.x = render_rects.battle_locs[MAX_MONS+count].x;
-            dynamic_battle_array[j].rect.y = render_rects.battle_locs[MAX_MONS+count].y;
+
             render_rect(renderer, dynamic_battle_array[j].rect, blue);
             render_text(dynamic_battle_array[j].rect.x, dynamic_battle_array[j].rect.y, white, dynamic_battle_array[j].name, font);
             count++;
         }
     }
+
 }
 
 //set initial player party
@@ -2628,7 +2761,7 @@ void decide_turn_order(size){
         swapped = false;
         for(i=0; i<size-1-x; i++){
 
-                if(dynamic_battle_array[i].spd < dynamic_battle_array[i+1].spd ){
+                if(dynamic_battle_array[i].spd < dynamic_battle_array[i+1].spd && strcmp("-", dynamic_battle_array[i].name) !=0 ){
 
                     dynamic_battle_array[i].turn += 1;
                     temp[i] = dynamic_battle_array[i];
@@ -2675,6 +2808,10 @@ int allocate_dynamic_battle_arr(void) {
             j++;
         }
     }
+    dynamic_battle_array[count-2].rect.x = render_rects.battle_locs[6].x;
+    dynamic_battle_array[count-2].rect.y = render_rects.battle_locs[6].y;
+    dynamic_battle_array[count - 1].rect.x = render_rects.battle_locs[7].x;
+    dynamic_battle_array[count - 1].rect.y = render_rects.battle_locs[7].y;
     SDL_Log("Succ");
     return j;
 
@@ -3328,9 +3465,17 @@ void init_char_dialogues(){
     snprintf(characters[1].dialogues[1].buffer, sizeof(characters[1].dialogues[1].buffer), "Get me that gold and I will give you the key to unlock that area");
     snprintf(characters[1].dialogues[2].buffer, sizeof(characters[1].dialogues[2].buffer), "Ok good, here's the key");
 
+    //fooly barton
     snprintf(characters[2].dialogues[0].buffer, sizeof(characters[2].dialogues[0].buffer), "I need help.");
     snprintf(characters[2].dialogues[1].buffer, sizeof(characters[2].dialogues[1].buffer), "Get me that thingy and I will get you the key to unlock the other area.");
     snprintf(characters[2].dialogues[2].buffer, sizeof(characters[2].dialogues[2].buffer), "Ok thanks, here.");
+
+    //test vendor
+    snprintf(characters[3].dialogues[0].buffer, sizeof(characters[3].dialogues[0].buffer), "I sell things here...care to buy something?.");
+    snprintf(characters[3].dialogues[1].buffer, sizeof(characters[3].dialogues[1].buffer), "Hey...you're an F-type pilot?.");
+    snprintf(characters[3].dialogues[2].buffer, sizeof(characters[3].dialogues[2].buffer), "Maybe you can help me with something. I need you to retrieve this item.");
+    snprintf(characters[3].dialogues[3].buffer, sizeof(characters[3].dialogues[3].buffer), "Come back when you have that item. Anyways wanna buy something?");
+    snprintf(characters[3].dialogues[4].buffer, sizeof(characters[3].dialogues[4].buffer), "Hey, you got it! Let me give you this pattern.");
 }
 
 void init_character_locs(){
@@ -3350,6 +3495,7 @@ void init_character_locs(){
 void init_key_items(){
     //NULL CHARACTER
 
+    //testy tim
     snprintf(characters[1].goal_items[0].name,sizeof(characters[1].goal_items[0].name),  "test key");
     snprintf(characters[1].reward_items[0].name, sizeof(characters[1].reward_items[0].name), "test reward");
     characters[1].goal_items[0].location.row =6;
@@ -3360,6 +3506,7 @@ void init_key_items(){
     characters[1].goal_items[0].ds = 1;
     world_areas[14].key = characters[1].reward_items[0];
 
+    //fooly barton
     snprintf(characters[2].goal_items[0].name, sizeof(characters[2].goal_items[0].name), "foobar key");
     snprintf(characters[2].reward_items[0].name, sizeof(characters[2].reward_items[0].name), "foobar reward");
     characters[2].goal_items[0].location.row = 5;
@@ -3369,6 +3516,17 @@ void init_key_items(){
     snprintf(characters[2].goal_items[0].dialogue_stop.id, sizeof(characters[2].goal_items[0].dialogue_stop.id), "0001");
     characters[2].goal_items[0].ds = 1;
     world_areas[15].key = characters[2].reward_items[0];
+
+    //test vendor
+    snprintf(characters[3].goal_items[0].name, sizeof(characters[3].goal_items[0].name), "vendor key");
+    snprintf(characters[3].reward_items[0].name, sizeof(characters[3].reward_items[0].name), "vendor reward");
+    characters[3].goal_items[0].location.row = 79;
+    characters[3].goal_items[0].location.col = 5;
+    characters[3].dialogue_stops[0].stop_ind = 3;
+    snprintf(characters[3].dialogue_stops[0].id, sizeof(characters[3].dialogue_stops[0].id), "0002");
+    snprintf(characters[3].goal_items[0].dialogue_stop.id, sizeof(characters[3].goal_items[0].dialogue_stop.id), "0002");
+    characters[3].goal_items[0].ds = 3;
+    //TODO this vender character's reward is a pattern
     
 
     
@@ -3420,9 +3578,20 @@ int handle_character_interact(){
                 entered_dia = true;
                 dia_ind = 0;
                     
-                
-            }
+                if (characters[i].is_vendor) {
+                    if (e_pressed) {
+                        SDL_Log("entering shopping state");
+                        near_vendor = true;
+                        ui_state = UIS_SHOP_UI_IDLE;
+                        return i;
+                    }
+                }
+                else{
+                    near_vendor = false;
+                }
 
+            }
+  
             return i;
         }
     }
@@ -3438,16 +3607,16 @@ int handle_character_interact(){
 void progress_character_dia(){
     
     if(entered_dia && interact_char_ind!=0){
-        SDL_Log("Dia ind- %d", dia_ind);
+        //SDL_Log("Dia ind- %d", dia_ind);
         render_text(characters[interact_char_ind].rect.x, characters[interact_char_ind].rect.y, white, characters[interact_char_ind].dialogues[dia_ind].buffer, font);
 
         int ds_ind = characters[interact_char_ind].ds_ind;
-        SDL_Log("ds_ind : %d", ds_ind);
+        //SDL_Log("ds_ind : %d", ds_ind);
         
         if(dia_ind != characters[interact_char_ind].dialogue_stops[ds_ind].stop_ind && characters[interact_char_ind].dialogue_stops[ds_ind].passed!=true && dia_ind !=-1){
             if (shift_pressed) {
                 dia_ind++;//this seems to be triggering
-                SDL_Log("Dia ind increased- %d", dia_ind);
+                //SDL_Log("Dia ind increased- %d", dia_ind);
                 shift_pressed = false;
             }
         }
@@ -3741,10 +3910,12 @@ void render_ui(){
             if(ui_elements[blnk].is_sub_display){
 
   
-                if (strcmp(ui_elements[blnk].label, "your patterns") ==0 && ui_state!= UIS_MON_LIST_OPEN){
+                if (strcmp(ui_elements[blnk].label, "your patterns") ==0 && ui_state!= UIS_MON_LIST_OPEN && ui_state <UIS_SHOP_UI_IDLE){
 
                     ui_state = UIS_PATTERN_LIST_OPEN;
-
+                    //set these to false so other menu cant be pressed now
+                    ui_elements[4].interactable = false;
+                    ui_elements[5].interactable = false;
                     if(!sub_buffer_filled){//on scroll, refilled and reset
 
                         for(int j =0; j< UI_SCROLL_MAX; j++){
@@ -3763,10 +3934,11 @@ void render_ui(){
                     }
 
                 }
-                if (strcmp(ui_elements[blnk].label, "your mons") == 0 && ui_state != UIS_PATTERN_LIST_OPEN) {
+                if (strcmp(ui_elements[blnk].label, "your mons") == 0 && ui_state != UIS_PATTERN_LIST_OPEN && ui_state < UIS_SHOP_UI_IDLE) {
 
                     ui_state = UIS_MON_LIST_OPEN;
-
+                    //set this to false so other menu cant be pressed now
+                    ui_elements[2].interactable = false;
                     if (!sub_buffer_filled) {//on scroll, refilled and reset
 
                         for (int k = 0; k < UI_SCROLL_MAX; k++) {
@@ -3774,7 +3946,7 @@ void render_ui(){
                             SDL_Log("Scroll index [k] = %i within your mons strcmp check", scroll_indices[k]);
                             mid_scr_ind = scroll_indices[1];//the middle in list that gets activated has its info displayed
                             //try to avoid potential out of bounds here
-                            if (player_mon_list[scr_ind].spd != 0){
+                            if (player_mon_list[scr_ind].spd != 0 || strcmp(player_mon_list[scr_ind].name, "-")==0){
                                 snprintf(curr_sub_disp_buff[k].display_text, sizeof(curr_sub_disp_buff[k].display_text), player_mon_list[scr_ind].name);
                             }
                         }
@@ -3816,12 +3988,15 @@ void render_ui(){
 
 
         if(ui_back_pressed){
+            ui_elements[2].interactable = true;//TODO may want to bundle into an iteration in a function for all except 0 and reset their interactable member
+            ui_elements[4].interactable = true;
+            ui_elements[5].interactable = true;
             sub_buffer_filled = false;
             for (int u = 0; u < ALL_UI_ELEMENTS; u++) {
                 if(ui_elements[u].rect.x == offscreen_x){
                     (ui_elements[u].rect.x = x_copy);
                 }
-                element_diplay_ind = 0;
+                element_display_ind = 0;
                 ui_elements[u].got_activated = false;
             }
             ui_state = UIS_IDLE;
@@ -3829,10 +4004,180 @@ void render_ui(){
 
     }
 
-
-
-
 }
+
+
+void render_shop_ui(){
+
+        
+
+    for (int i = 0; i < ALL_UI_ELEMENTS; i++) {
+
+        if (shop_ui_elements[i].layer < 2) {
+
+            render_rect(renderer, shop_ui_elements[i].rect, shop_ui_elements[i].color);
+
+            if (strcmp(shop_ui_elements[i].label, "Buy") == 0) {
+                render_text(shop_ui_elements[i].rect.x, shop_ui_elements[i].rect.y, black, shop_ui_elements[i].label, font);
+            }
+
+            if (strcmp(shop_ui_elements[i].label, "Sell") == 0) {
+                render_text(shop_ui_elements[i].rect.x, shop_ui_elements[i].rect.y, black, shop_ui_elements[i].label, font);
+            }
+
+        }
+        if (shop_ui_elements[i].got_activated && shop_ui_elements[i].blanket_ind > -1) {
+
+
+            //the blanket index will be used unless back is pressed, and if it doesnt have a subdisplay the below logic wont happen
+            int blnk = ui_back_pressed ? i : shop_ui_elements[i].blanket_ind;
+            float offset_newline = 0.0;
+            render_rect(renderer, shop_ui_elements[blnk].rect, shop_ui_elements[blnk].color);//TODO until go back is pressed
+
+            if (shop_ui_elements[blnk].blanket_ind > -1) {
+                x_copy = shop_ui_elements[blnk].rect.x;
+                shop_ui_elements[i].rect.x = offscreen_x;
+            }
+
+            if (shop_ui_elements[blnk].is_sub_display) {
+
+
+                if (strcmp(shop_ui_elements[blnk].label, "Available Patterns") == 0 && ui_state != UIS_SELL_LIST_OPEN) {
+
+                    ui_state = UIS_BUY_LIST_OPEN;
+                    //set these to false so other menu cant be pressed now
+                    shop_ui_elements[4].interactable = false;
+
+                    if (!sub_buffer_filled) {//on scroll, refilled and reset
+
+                        for (int j = 0; j < UI_SCROLL_MAX; j++) {
+                            int scr_ind = scroll_indices[j];
+                            mid_scr_ind = scroll_indices[1];//the middle in list that gets activated has its info displayed
+                            //try to avoid potential out of bounds here
+                            if (strcmp(shop_proj_strs[scr_ind].str, "") != 0) {
+                                snprintf(curr_sub_disp_buff[j].display_text, sizeof(curr_sub_disp_buff[j].display_text),shop_proj_strs[scr_ind].str);
+                            }
+                        }
+                        sub_buffer_filled = true;
+                    }
+                    for (int p = 0; p < UI_SCROLL_MAX; p++) {
+                        render_text(shop_ui_elements[blnk].rect.x, shop_ui_elements[blnk].rect.y + offset_newline, black, curr_sub_disp_buff[p].display_text, font);
+                        offset_newline += 100;
+                    }
+
+                }
+                if (strcmp(shop_ui_elements[blnk].label, "Your Sellable Patterns") == 0 && ui_state != UIS_BUY_LIST_OPEN) {
+
+                    ui_state = UIS_SELL_LIST_OPEN;
+                    //set this to false so other menu cant be pressed now
+                    shop_ui_elements[2].interactable = false;
+                    if (!sub_buffer_filled) {//on scroll, refilled and reset
+
+                        for (int k = 0; k < UI_SCROLL_MAX; k++) {
+                            int scr_ind = scroll_indices[k];
+                            SDL_Log("Scroll index [k] = %i within your mons strcmp check", scroll_indices[k]);
+                            mid_scr_ind = scroll_indices[1];//the middle in list that gets activated has its info displayed
+                            //try to avoid potential out of bounds here
+                            if (strcmp(player_proj_strs[scr_ind].str, "") != 0) {
+                                snprintf(curr_sub_disp_buff[k].display_text, sizeof(curr_sub_disp_buff[k].display_text), player_proj_strs[scr_ind].str);
+                            }
+                        }
+                        sub_buffer_filled = true;
+                    }
+                    for (int m = 0; m < UI_SCROLL_MAX; m++) {
+                        render_text(shop_ui_elements[blnk].rect.x, shop_ui_elements[blnk].rect.y + offset_newline, black, curr_sub_disp_buff[m].display_text, font);
+                        offset_newline += 100;
+                    }
+
+                }
+
+            }
+            int finger = 0;
+
+            //BUYING
+            if (strcmp(shop_ui_elements[blnk].label, "yn prompt buy") == 0) {
+                render_text(shop_ui_elements[blnk].rect.x, shop_ui_elements[blnk].rect.y, black, "Buy?", font);
+                if (yesno) {
+                        
+                    for (int p =0; p<ALL_PROJ_STRS; p++){
+                        if(strcmp(player_proj_strs[p].str,"-") ==0){
+                            finger = p;
+                        }
+                    }
+                    //set the player proj str list '-' to the mid scr ind
+                    snprintf(player_proj_strs[finger].str, sizeof(player_proj_strs[finger].str), shop_proj_strs[mid_scr_ind].str);
+                    //set the new bookend
+                    snprintf(player_proj_strs[finger+1].str, sizeof(player_proj_strs[finger+1].str), "-");
+                    shop_ui_open += 1;
+                    //subtract money from player add to shop TODO
+                    SDL_Log("Store Wallet before %i", characters[interact_char_ind].wallet);
+                    SDL_Log("Player Wallet before %i", world_player.wallet);
+                    world_player.wallet -= shop_proj_strs[mid_scr_ind].price;
+                    characters[interact_char_ind].wallet += shop_proj_strs[mid_scr_ind].price;
+                    SDL_Log("Store Wallet after %i", characters[interact_char_ind].wallet);
+                    SDL_Log("Player Wallet after %i", world_player.wallet);
+                    SDL_Log("Projectile bought");
+                    yesno = false;
+                }
+            }
+               
+            //SELLING
+            if (strcmp(shop_ui_elements[blnk].label, "yn prompt sell") == 0) {
+                render_text(shop_ui_elements[blnk].rect.x, shop_ui_elements[blnk].rect.y, black, "Sell?", font);
+                if (yesno) {
+                    for (int q = 0; q < ALL_PROJ_STRS; q++) {
+                        if (strcmp(shop_proj_strs[q].str, "-") == 0) {
+                            finger = q;
+                        }
+                    }
+ 
+                    //set the shop str list '-' to the mid scr ind
+                    snprintf(shop_proj_strs[finger].str, sizeof(shop_proj_strs[finger].str), player_proj_strs[mid_scr_ind].str);
+                    //set the new bookend
+                    snprintf(shop_proj_strs[finger + 1].str, sizeof(shop_proj_strs[finger + 1].str), "-");
+                    shop_ui_open += 1;
+                    //subtract money from shop add to player TODO
+                    SDL_Log("Store Wallet before %i", characters[interact_char_ind].wallet);
+                    SDL_Log("Player Wallet before %i", world_player.wallet);
+                    characters[interact_char_ind].wallet -= player_proj_strs[mid_scr_ind].price;
+                    world_player.wallet += player_proj_strs[mid_scr_ind].price;
+                    SDL_Log("Store Wallet after %i", characters[interact_char_ind].wallet);
+                    SDL_Log("Player Wallet after %i", world_player.wallet);
+                    snprintf(player_proj_strs[mid_scr_ind].str, sizeof(player_proj_strs[mid_scr_ind].str), "sold");
+                    //check if the mid_scr_ind needs to be rearranged to remove the sold str
+                    if (mid_scr_ind != finger - 1) {
+                        for (int m = mid_scr_ind + 1; m < finger; m++) {
+                            player_proj_strs[m - 1] = player_proj_strs[m];//set each +1 index from the mid_scr_ind to next memory
+                        }
+                    }
+                    SDL_Log("Projectile sold");
+                    yesno = false;
+                }
+            }
+
+
+        }
+
+
+        if (ui_back_pressed) {
+            shop_ui_elements[2].interactable = true;
+            shop_ui_elements[4].interactable = true;
+
+            sub_buffer_filled = false;
+            for (int u = 0; u < ALL_UI_ELEMENTS; u++) {
+                if (shop_ui_elements[u].rect.x == offscreen_x) {
+                    (shop_ui_elements[u].rect.x = x_copy);
+                }
+                shop_element_display_ind = 0;
+                shop_ui_elements[u].got_activated = false;
+            }
+            ui_state = UIS_SHOP_UI_IDLE;
+        }
+
+    }
+}
+
+
 
 void handle_scroll_event(){
     if(ui_state == UIS_MON_LIST_OPEN){
@@ -3901,21 +4246,108 @@ void handle_scroll_event(){
 
     }
 
+    if(ui_state ==UIS_BUY_LIST_OPEN){
+        //SDL_Log("shop list size %i", shop_list_size);
+        if (scrolldown_pressed) {
+            if (scroll_indices[0] != shop_list_size - UI_SCROLL_MAX) {
+                sub_buffer_filled = false;
+                for (int i = 0; i < UI_SCROLL_MAX; i++) {
+
+
+
+                    scroll_indices[i] += 1;
+
+                    SDL_Log("Scroll index [i] = %i", scroll_indices[i]);
+
+                }
+            }
+        }
+        if (scrollup_pressed) {
+            if (scroll_indices[UI_SCROLL_MAX - 1] != UI_SCROLL_MAX - 1) {
+
+
+                sub_buffer_filled = false;
+                for (int j = 0; j < UI_SCROLL_MAX; j++) {
+
+
+                    scroll_indices[j] -= 1;
+
+                    SDL_Log("Scroll index [j] = %i", scroll_indices[j]);
+
+                }
+            }
+        }
+    }
+
+    if (ui_state == UIS_SELL_LIST_OPEN) {
+        //SDL_Log("patt list size (sell) %i", pattern_list_size);
+        if (scrolldown_pressed) {
+            if (scroll_indices[0] != sell_list_size - UI_SCROLL_MAX) {
+                sub_buffer_filled = false;
+                for (int i = 0; i < UI_SCROLL_MAX; i++) {
+
+
+
+                    scroll_indices[i] += 1;
+
+                    SDL_Log("Scroll index [i] = %i", scroll_indices[i]);
+
+                }
+            }
+        }
+        if (scrollup_pressed) {
+            if (scroll_indices[UI_SCROLL_MAX - 1] != UI_SCROLL_MAX - 1) {
+
+
+                sub_buffer_filled = false;
+                for (int j = 0; j < UI_SCROLL_MAX; j++) {
+
+
+                    scroll_indices[j] -= 1;
+
+                    SDL_Log("Scroll index [j] = %i", scroll_indices[j]);
+
+                }
+            }
+        }
+    }
     scrolldown_pressed = false;
     scrollup_pressed = false;
 }
 
 size_t get_mon_list_size(){
+
     size_t size = 0;
     size = sizeof(player_mon_list) / sizeof(Monster);
-    return size;
+    int count = 0;
+    for (int i = 0; i < MAX_MONS; i++) {
+        if (player_mon_list[i].spd== 0 && strcmp(player_mon_list[i].name, "-") != 0) {
+            count++;
+        }
+    }
+
+    
+    return size -count;
 }
 
 int get_pattern_list_size() {
     int sc = 0;
     for(int i=0; i< ALL_PROJ_STRS; i++){
 
-        if(isalpha(player_proj_strs[i].str[1])){
+        if(isalpha(player_proj_strs[i].str[1]) || strcmp(player_proj_strs[i].str, "-")==0){
+            sc++;
+        }
+
+    }
+    
+    return sc;
+}
+
+int get_shop_list_size(){
+    int sc = 0;
+    for(int i=0; i< ALL_PROJ_STRS; i++){
+
+        if(isalpha(shop_proj_strs[i].str[1]) || strcmp(shop_proj_strs[i].str, "-")==0){
             sc++;
         }
 
