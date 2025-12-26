@@ -280,11 +280,17 @@ Uint32 proj_coll_start_en;
 Uint32 proj_coll_elapsed_en;
 bool proj_coll_started_en;
 
-Uint32 saw_period = 30;
-Uint32 saw_start_time;
-Uint32 saw_elapsed;
-int saw_sign = -1;
 
+int saw_sign = -1;
+int circle_radius = 300;
+// stored per projectile
+float circ_angle;          // radians
+float angular_speed;  // radians per frame
+int phase;//need to always add track velocity to the phase to be altered by sine and cosine while x is being changed linearly in order for circle to work
+Uint32 circle_start_time;
+Uint32 circle_elapsed;
+bool circle_started;
+Uint32 circle_delay = 5;
 typedef struct {
     char str[40];
     int price;
@@ -299,6 +305,7 @@ ProjectileString player_proj_strs[ALL_PROJ_STRS] = {
     {"-"},
     {"normal", .price = 100},
     {"sine", .price = 100},
+    {"circle", .price =100},
     {"saw", .price = 100},
     {"foo", .price = 100},
     {"bar", .price = 100},
@@ -2284,8 +2291,25 @@ void accel_player_proj() {
                     player_proj.rects.y  = saw_sign == -1? player_proj.rects.y - track_velocity  : player_proj.rects.y + track_velocity ;
    
                 }
-                //top and bottom (mon) projs
+                else if (strcmp(player_proj.type, "circle") == 0) {
+                    //take projectiles x and y and player x and y (center) 
 
+                    float playx = player_rect.x;
+                    float playy = player_rect.y;
+                    circ_angle += angular_speed;
+                    phase += track_velocity;
+                    if(!circle_started){
+                        circle_start_time = now;
+                        circle_started = true;
+                    }
+                    circle_elapsed = now - circle_start_time;
+                    if(circle_elapsed >= circle_delay){
+                        player_proj.rects.x = playx + cos(phase) * circle_radius;
+                        player_proj.rects.y = playy + sin(phase) * circle_radius;
+                        circle_started = false;
+                        circle_elapsed = 0;
+                    }
+                }
                 if (strcmp(ship_top_proj.type, "sine") == 0) {
                     ship_top_proj.rects.y += sin(sqrt(ship_top_proj.rects.x)) * track_velocity;
                 }
